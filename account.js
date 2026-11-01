@@ -11,7 +11,7 @@ var telegram_channel_link = "https://t.me/+HmdZZwHYcxBhMGE9 ";
 // =======================================================
 // TELEGRAM GROUP LINK
 // =======================================================
-var telegram_group_link = "telegram group link";
+var whatsapp_group_link = "https://whatsapp.com/channel/0029Vb9hggbBVJkzS6Vv6n1U ";
 
 // =======================================================
 // YOUTUBE CHANNEL LINK
