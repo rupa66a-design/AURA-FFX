@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-<script>window.__FFX_AUTH__={loggedIn:false,user:null};</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
@@ -783,11 +782,6 @@ html,body,.pk,.po,.btn,.pay,.q,.card,.nav a,.pv-back{touch-action:manipulation}
 .ac-mi.out{color:#b42318}
 .ac-mi.out .mi{background:#fee4e2;color:#b42318}
 </style>
-
-<style>
-.ffx-modal{display:none;position:fixed;inset:0;z-index:99999;background:#0009;align-items:center;justify-content:center;padding:16px}.ffx-modal.open{display:flex}.ffx-modal-card{width:min(100%,440px);max-height:90vh;overflow:auto;background:#fff;color:#172033;border-radius:16px;padding:20px;box-shadow:0 15px 55px #0004}.ffx-modal-card h2{margin:0 0 14px}.ffx-modal-card label{display:block;font-weight:600;margin:10px 0 5px}.ffx-modal-card input,.ffx-modal-card select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#111827}.ffx-modal-card button{padding:11px 15px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}.ffx-modal-card .ffx-secondary{background:#e8eefb;color:#17366f}.ffx-modal-card .ffx-close{float:right;background:#eef2f7;color:#172033}.ffx-error{display:block;color:#b42318;min-height:22px;margin:8px 0}.ffx-payinfo{background:#f1f5fb;border-radius:10px;padding:12px;margin:10px 0;color:#172033}.ffx-deposit-item{border-top:1px solid #e2e8f0;padding:9px 0;display:flex;flex-direction:column;gap:4px}.ffx-deposit-item small{color:#64748b}.ffx-muted{font-size:12px;color:#64748b;line-height:1.5}
-</style>
-
 </head>
 <body>
 
@@ -2129,7 +2123,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   var buy=document.getElementById('buyBtn'), warn=document.getElementById('loginWarn');
   function upd(){
     document.getElementById('needAmt').textContent=sel.price;
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';buy.textContent='অর্ডার করুন';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';buy.textContent='অর্ডার করুন';buy.href='#';}
     else{warn.style.display='flex';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   document.querySelectorAll('#pkGrid .pk').forEach(function(b){
@@ -2155,7 +2149,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=document.getElementById('uid').value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2164,7 +2158,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 
 // ==========================================
@@ -2191,7 +2184,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('uidNeed').textContent=sel.price;
     document.getElementById('uidBal').textContent=BALANCE.toFixed(2);
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('uidBalRow'), rf=document.getElementById('uidRf');
@@ -2240,7 +2233,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=inp.value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2249,7 +2242,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 // ==========================================
 // 6. WEEKLY/MONTHLY PRODUCT VIEW
@@ -2275,7 +2267,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('wmNeed').textContent=sel.price;
     document.getElementById('wmBal').textContent=BALANCE.toFixed(2);
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('wmBalRow'), rf=document.getElementById('wmRf');
@@ -2324,7 +2316,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=inp.value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2333,7 +2325,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 // ==========================================
 // 7. WEEKLY LITE PRODUCT VIEW
@@ -2359,7 +2350,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('wlNeed').textContent=sel.price;
     document.getElementById('wlBal').textContent=BALANCE.toFixed(2);
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('wlBalRow'), rf=document.getElementById('wlRf');
@@ -2408,7 +2399,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=inp.value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2417,7 +2408,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 // ==========================================
 // 8. LEVEL UP PASS PRODUCT VIEW
@@ -2443,7 +2433,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('luNeed').textContent=sel.price;
     document.getElementById('luBal').textContent=BALANCE.toFixed(2);
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('luBalRow'), rf=document.getElementById('luRf');
@@ -2492,7 +2482,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=inp.value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2501,7 +2491,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 // ==========================================
 // 9. INDONESIA SERVER PRODUCT VIEW
@@ -2527,7 +2516,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('inNeed').textContent=sel.price;
     document.getElementById('inBal').textContent=BALANCE.toFixed(2);
-    if(window.__FFX_AUTH__.loggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('inBalRow'), rf=document.getElementById('inRf');
@@ -2576,7 +2565,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     pn.innerHTML='<svg class="i"><use href="#chk"/></svg>আইডি: '+uid;
   };
   buy.addEventListener('click',function(e){
-    if(!window.__FFX_AUTH__.loggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
+    if(!isLoggedIn){ if(LOGIN_URL==='#')e.preventDefault(); return; }
     e.preventDefault();
     var uid=inp.value.trim();
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
@@ -2585,7 +2574,6 @@ setInterval(fetchFreshAccountConfig, 15000);
     toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
-  window.addEventListener("ffx-auth-change", upd);
 })();
 </script>
 <script>
@@ -3065,10 +3053,5 @@ setInterval(fetchFreshAccountConfig, 15000);
   sync();
 })();
 </script>
-
-<div class="ffx-modal" id="authBox" role="dialog" aria-modal="true"><div class="ffx-modal-card"><button class="ffx-close" type="button" data-ffx-close="authBox">✕</button><h2 id="authTitle">Sign In</h2><form id="authForm"><input type="hidden" id="authMode" value="login"><div id="authNameWrap" hidden><label for="authName">নাম</label><input id="authName" maxlength="60" autocomplete="name"></div><label for="authEmail">ইমেইল</label><input id="authEmail" type="email" required autocomplete="email"><label for="authPassword">পাসওয়ার্ড</label><input id="authPassword" type="password" required minlength="8" maxlength="72" autocomplete="current-password"><span class="ffx-error" id="authError"></span><button id="authSubmit" type="submit">Sign In</button> <button class="ffx-secondary" id="authSwitch" type="button">Create Account</button></form><p class="ffx-muted">নিজের অ্যাকাউন্টের তথ্য নিরাপদে রাখুন। অন্য কারও পাসওয়ার্ড ব্যবহার করবেন না।</p></div></div>
-<div class="ffx-modal" id="depositBox" role="dialog" aria-modal="true"><div class="ffx-modal-card"><button class="ffx-close" type="button" data-ffx-close="depositBox">✕</button><h2>Add Money</h2><div class="ffx-payinfo"><b>bKash:</b> <span id="payBkash">Loading...</span><br><b>Nagad:</b> <span id="payNagad">Loading...</span><p class="ffx-muted">Admin-এর দেখানো নম্বরে টাকা পাঠানোর পর নিচে সঠিক TrxID জমা দিন। আবেদন যাচাই না হওয়া পর্যন্ত ব্যালেন্স যোগ হবে না।</p></div><form id="depositForm"><label for="depAmount">পরিমাণ (৳)</label><input id="depAmount" type="number" min="10" max="100000" step="0.01" required><label for="depMethod">পেমেন্ট মাধ্যম</label><select id="depMethod"><option value="bKash">bKash</option><option value="Nagad">Nagad</option></select><label for="depSender">যে নম্বর থেকে টাকা পাঠিয়েছেন</label><input id="depSender" inputmode="numeric" placeholder="01XXXXXXXXX" required><label for="depTrxid">Transaction ID (TrxID)</label><input id="depTrxid" maxlength="100" required><span class="ffx-error" id="depositError"></span><button type="submit">Submit Request</button></form><h3>আমার আবেদন</h3><div id="myDeposits">লোড হচ্ছে...</div></div></div>
-<script src="/wallet.js" defer></script>
-
 </body>
 </html>
