@@ -1,8 +1,11 @@
 {
   "logo": null,
   "ffBanner": "ff-banner-1793889276282.jpg",
-  "ffPackages": null,
-  "banners": null,
+  "banners": [
+    "banner-1794230044928-905.jpg",
+    "default:Banner 2.jpg",
+    "default:Banner 3.jpg"
+  ],
   "quick": [
     {
       "label": "Telegram",
@@ -16,5 +19,8 @@
       "label": "YouTube",
       "url": ""
     }
-  ]
+  ],
+  "images": null,
+  "prod": null,
+  "texts": null
 }
