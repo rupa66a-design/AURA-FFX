@@ -65,10 +65,12 @@
       "amount": 100,
       "method": "bKash",
       "trxId": "ASHX61XVJ",
-      "status": "Pending",
+      "status": "Approved",
       "date": "2026-11-14T02:30:21.105Z",
-      "updated": "2026-11-14T02:30:21.105Z"
+      "updated": "2026-11-14T02:30:50.812Z"
     }
   ],
-  "balances": {}
+  "balances": {
+    "1e2c64487a966fa2e9e253f68dab66739bda311d": 100
+  }
 }
