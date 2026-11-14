@@ -85,7 +85,7 @@ const TEXTS = [
   { id: 'playUrl', label: 'Google Play link', def: '', max: 300, url: true }
 ];
 
-function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [], deposits: [], balances: {} }; }
+function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [], deposits: [], balances: {}, users: [], sessions: [] }; }
 let config = emptyCfg();
 function imgGet(c, k) { return (k === 'logo' || k === 'ffBanner') ? c[k] : ((c.images && c.images[k]) || null); }
 function imgSet(next, k, v) {
@@ -213,6 +213,8 @@ function loadLocal() {
         return o && typeof o.id === 'string' && typeof o.customerKey === 'string' && Number.isFinite(Number(o.amount));
       }).slice(-3000);
     }
+    if (Array.isArray(j.users)) config.users = j.users.filter(function (u) { return u && /^[a-f0-9]{40}$/i.test(String(u.id || '')) && typeof u.email === 'string' && typeof u.passwordHash === 'string' && typeof u.passwordSalt === 'string'; }).slice(-50000);
+    if (Array.isArray(j.sessions)) config.sessions = j.sessions.filter(function (x) { return x && /^[a-f0-9]{64}$/i.test(String(x.tokenHash || '')) && /^[a-f0-9]{40}$/i.test(String(x.userId || '')) && Number.isFinite(Number(x.expires)); }).slice(-10000);
     if (j.balances && typeof j.balances === 'object') {
       const b = {};
       Object.keys(j.balances).forEach(function (k) {
@@ -606,6 +608,41 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+function cookieValue(req, name) {
+  const raw = String(req.headers.cookie || '');
+  const part = raw.split(';').map(function (x) { return x.trim(); }).filter(function (x) { return x.indexOf(name + '=') === 0; })[0];
+  return part ? decodeURIComponent(part.slice(name.length + 1)) : '';
+}
+function hashText(value) { return crypto.createHash('sha256').update(String(value)).digest('hex'); }
+function publicUser(user) { return user ? { id:user.id, name:user.name, email:user.email, createdAt:user.createdAt } : null; }
+function currentUser(req) {
+  const token = cookieValue(req, 'aura_session');
+  if (!token || !/^[a-f0-9]{64}$/i.test(token)) return null;
+  const hash = hashText(token), now = Date.now();
+  const session = (config.sessions || []).find(function (x) { return x.tokenHash === hash && Number(x.expires) > now; });
+  if (!session) return null;
+  return (config.users || []).find(function (u) { return u.id === session.userId; }) || null;
+}
+function setUserCookie(req, res, token, maxAge) {
+  const secure = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https' || !!req.socket.encrypted;
+  res.setHeader('Set-Cookie', 'aura_session=' + encodeURIComponent(token || '') + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + maxAge + (secure ? '; Secure' : ''));
+}
+async function passwordHash(password, salt) {
+  return new Promise(function (resolve, reject) {
+    crypto.scrypt(String(password), salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, function (err, key) {
+      if (err) reject(err); else resolve(key.toString('hex'));
+    });
+  });
+}
+async function createUserSession(req, res, user) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now(), expires = now + 30 * 24 * 60 * 60 * 1000;
+  const sessions = (config.sessions || []).filter(function (x) { return Number(x.expires) > now; });
+  sessions.push({ tokenHash:hashText(token), userId:user.id, expires:expires });
+  await commit(Object.assign({}, config, { sessions:sessions.slice(-10000) }), 'Customer login session', [], []);
+  setUserCookie(req, res, token, 30 * 24 * 60 * 60);
+}
+
 function readBody(req, limit) {
   return new Promise(function (resolve, reject) {
     let size = 0; const chunks = [];
@@ -697,15 +734,58 @@ function findServerPackage(productKey, packageName) {
 
 async function handleApi(req, res, pathname) {
   try {
+    if (req.method === 'GET' && pathname === '/api/auth/config') return sendJson(res, 200, { googleClientId:'' });
+    if (req.method === 'GET' && pathname === '/api/auth/me') return sendJson(res, 200, { user:publicUser(currentUser(req)) });
+
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const body = await readJson(req, 8192);
+      const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      if (name.length < 2) return sendJson(res, 400, { error:'আপনার নাম কমপক্ষে ২ অক্ষরের দিন।' });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return sendJson(res, 400, { error:'সঠিক Email Address দিন।' });
+      if (password.length < 8 || password.length > 128) return sendJson(res, 400, { error:'Password কমপক্ষে ৮ অক্ষরের হতে হবে।' });
+      if ((config.users || []).some(function (u) { return u.email === email; })) return sendJson(res, 409, { error:'এই Email দিয়ে আগে অ্যাকাউন্ট খোলা হয়েছে। Login করুন।' });
+      const salt = crypto.randomBytes(16).toString('hex');
+      const digest = await passwordHash(password, salt);
+      const user = { id:crypto.randomBytes(20).toString('hex'), name:name, email:email, passwordSalt:salt, passwordHash:digest, createdAt:new Date().toISOString() };
+      const users = (config.users || []).concat(user);
+      await commit(Object.assign({}, config, { users:users }), 'New customer registration', [], []);
+      await createUserSession(req, res, user);
+      return sendJson(res, 201, { ok:true, user:publicUser(user) });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const body = await readJson(req, 8192);
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      const user = (config.users || []).find(function (u) { return u.email === email; });
+      if (!user || password.length > 128) return sendJson(res, 401, { error:'Email অথবা Password সঠিক নয়।' });
+      const digest = await passwordHash(password, user.passwordSalt);
+      const a = Buffer.from(digest, 'hex'), b = Buffer.from(user.passwordHash, 'hex');
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return sendJson(res, 401, { error:'Email অথবা Password সঠিক নয়।' });
+      await createUserSession(req, res, user);
+      return sendJson(res, 200, { ok:true, user:publicUser(user) });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      const token = cookieValue(req, 'aura_session');
+      const tokenHash = token ? hashText(token) : '';
+      const sessions = (config.sessions || []).filter(function (x) { return x.tokenHash !== tokenHash; });
+      await commit(Object.assign({}, config, { sessions:sessions }), 'Customer logout', [], []);
+      setUserCookie(req, res, '', 0);
+      return sendJson(res, 200, { ok:true });
+    }
+
     if (req.method === 'GET' && pathname === '/api/payments') {
       return sendJson(res, 200, paymentView());
     }
 
     // Customer wallet and manual Add Money requests
     if (req.method === 'GET' && pathname === '/api/add-money') {
-      const u = new URL(req.url, 'http://localhost');
-      const customerKey = u.searchParams.get('customer') || '';
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
+      const user = currentUser(req);
+      if (!user) return sendJson(res, 401, { error:'Add Money দেখতে Login করুন।' });
+      const customerKey = user.id;
       const history = (config.deposits || []).filter(function (x) { return x.customerKey === customerKey; }).slice(-100).reverse().map(function (x) {
         return { id:x.id, amount:x.amount, method:x.method, trxId:x.trxId, status:x.status, date:x.date, updated:x.updated };
       });
@@ -714,8 +794,9 @@ async function handleApi(req, res, pathname) {
 
     if (req.method === 'POST' && pathname === '/api/add-money') {
       const body = await readJson(req, 8192);
-      const customerKey = String(body.customerKey || '');
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
+      const user = currentUser(req);
+      if (!user) return sendJson(res, 401, { error:'Add Money request করার আগে Login করুন।' });
+      const customerKey = user.id;
       const amount = Math.round(Number(body.amount) * 100) / 100;
       if (!Number.isFinite(amount) || amount < 10 || amount > 50000) return sendJson(res, 400, { error: '১০ থেকে ৫০,০০০ টাকার মধ্যে Amount দিন।' });
       const method = String(body.method || '');
@@ -733,8 +814,9 @@ async function handleApi(req, res, pathname) {
 
     if (req.method === 'POST' && pathname === '/api/orders') {
       const body = await readJson(req, 8192);
-      const customerKey = String(body.customerKey || '');
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
+      const user = currentUser(req);
+      if (!user) return sendJson(res, 401, { error:'প্যাকেজ অর্ডার করতে আগে Login করুন।' });
+      const customerKey = user.id;
       const product = String(body.product || '');
       const pkg = findServerPackage(product, String(body.packageName || ''));
       if (!pkg) return sendJson(res, 400, { error: 'প্যাকেজটি পাওয়া যায়নি। আবার প্যাকেজ নির্বাচন করুন।' });
@@ -777,9 +859,9 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/orders') {
-      const u = new URL(req.url, 'http://localhost');
-      const customerKey = u.searchParams.get('customer') || '';
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
+      const user = currentUser(req);
+      if (!user) return sendJson(res, 401, { error:'অর্ডার দেখতে Login করুন।' });
+      const customerKey = user.id;
       const orders = (config.orders || []).filter(function (o) { return o.customerKey === customerKey; })
         .slice(-100).reverse().map(function (o) {
           return { id: o.id, status: o.status, date: o.date, updated: o.updated,
