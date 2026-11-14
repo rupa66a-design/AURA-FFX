@@ -85,7 +85,7 @@ const TEXTS = [
   { id: 'playUrl', label: 'Google Play link', def: '', max: 300, url: true }
 ];
 
-function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [], users: [] }; }
+function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [], deposits: [], balances: {} }; }
 let config = emptyCfg();
 function imgGet(c, k) { return (k === 'logo' || k === 'ffBanner') ? c[k] : ((c.images && c.images[k]) || null); }
 function imgSet(next, k, v) {
@@ -208,11 +208,17 @@ function loadLocal() {
         return o && typeof o.id === 'string' && typeof o.customerKey === 'string';
       }).slice(-2000);
     }
-    if (Array.isArray(j.users)) {
-      config.users = j.users.filter(function (u) {
-        return u && typeof u.id === 'string' && typeof u.email === 'string' &&
-          typeof u.salt === 'string' && typeof u.passwordHash === 'string';
-      }).slice(-10000);
+    if (Array.isArray(j.deposits)) {
+      config.deposits = j.deposits.filter(function (o) {
+        return o && typeof o.id === 'string' && typeof o.customerKey === 'string' && Number.isFinite(Number(o.amount));
+      }).slice(-3000);
+    }
+    if (j.balances && typeof j.balances === 'object') {
+      const b = {};
+      Object.keys(j.balances).forEach(function (k) {
+        if (validCustomerKey(k) && Number.isFinite(Number(j.balances[k])) && Number(j.balances[k]) >= 0) b[k] = Math.round(Number(j.balances[k]) * 100) / 100;
+      });
+      config.balances = b;
     }
   } catch (e) {}
   cfgVersion++;
@@ -504,7 +510,6 @@ function applySiteConfig(html) {
   }
   html = applyProducts(html);
   html = applyTexts(html, inj);
-  inj.push('window.AURA_GOOGLE_CLIENT_ID = ' + jsStr(process.env.GOOGLE_CLIENT_ID || '') + ';');
   if (inj.length) html = html.replace('window.ACCOUNT_CONFIG = window.ACCOUNT_CONFIG || {};', function (m) { return m + '\n' + inj.join('\n'); });
   return html;
 }
@@ -690,160 +695,46 @@ function findServerPackage(productKey, packageName) {
   })[0] || null;
 }
 
-
-// Customer authentication: signed HttpOnly cookie + scrypt password hashes.
-const AUTH_SECRET = crypto.createHash('sha256').update(
-  'aura-user-auth:' + (process.env.AURA_AUTH_SECRET || process.env.FFX_PASS || process.env.FFX_G || crypto.randomBytes(32).toString('hex'))
-).digest();
-const USER_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
-const userLoginAttempts = new Map();
-function userLoginBlocked(ip) {
-  const now = Date.now(), item = userLoginAttempts.get(ip);
-  if (!item || now - item.start > 15 * 60 * 1000) { userLoginAttempts.set(ip, { count: 0, start: now }); return false; }
-  return item.count >= 10;
-}
-function recordUserLoginFail(ip) {
-  const now = Date.now(), item = userLoginAttempts.get(ip);
-  if (!item || now - item.start > 15 * 60 * 1000) userLoginAttempts.set(ip, { count: 1, start: now });
-  else item.count++;
-}
-
-function cookieValue(req, name) {
-  const raw = req.headers.cookie || '';
-  const part = raw.split(';').map(function (x) { return x.trim(); }).filter(function (x) { return x.indexOf(name + '=') === 0; })[0];
-  return part ? decodeURIComponent(part.slice(name.length + 1)) : '';
-}
-function userSign(payload) {
-  return crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
-}
-function makeUserSession(userId) {
-  const payload = Buffer.from(JSON.stringify({ sub: userId, exp: Date.now() + USER_SESSION_MS })).toString('base64url');
-  return payload + '.' + userSign(payload);
-}
-function readUserSession(req) {
-  const token = cookieValue(req, 'aura_user_session');
-  const parts = token.split('.');
-  if (parts.length !== 2 || !safeEq(parts[1], userSign(parts[0]))) return null;
-  try {
-    const p = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
-    if (!p.sub || !Number.isFinite(p.exp) || p.exp < Date.now()) return null;
-    return (config.users || []).find(function (u) { return u.id === p.sub; }) || null;
-  } catch (_) { return null; }
-}
-function setUserCookie(req, res, userId) {
-  const secure = req.headers['x-forwarded-proto'] === 'https' || !!req.socket.encrypted;
-  const token = makeUserSession(userId);
-  res.setHeader('Set-Cookie', 'aura_user_session=' + encodeURIComponent(token) +
-    '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + Math.floor(USER_SESSION_MS / 1000) + (secure ? '; Secure' : ''));
-}
-function clearUserCookie(req, res) {
-  const secure = req.headers['x-forwarded-proto'] === 'https' || !!req.socket.encrypted;
-  res.setHeader('Set-Cookie', 'aura_user_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (secure ? '; Secure' : ''));
-}
-function publicUser(u) {
-  return { id: u.id, name: u.name || u.email.split('@')[0], email: u.email, provider: u.provider || 'email' };
-}
-function makePasswordHash(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
-}
-function validEmail(email) {
-  return typeof email === 'string' && email.length <= 254 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-async function verifyGoogleIdToken(idToken) {
-  if (!process.env.GOOGLE_CLIENT_ID) throw new Error('Google Login চালু করতে Render Environment-এ GOOGLE_CLIENT_ID সেট করুন');
-  if (typeof idToken !== 'string' || idToken.length > 10000) throw new Error('Google token ঠিক নেই');
-  const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken);
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new Error('Google Login যাচাই করা যায়নি');
-  const info = await response.json();
-  if (info.aud !== process.env.GOOGLE_CLIENT_ID || info.email_verified !== 'true' ||
-      !validEmail(info.email) || (info.exp && Number(info.exp) * 1000 < Date.now())) {
-    throw new Error('Google Account যাচাই ব্যর্থ হয়েছে');
-  }
-  return { email: String(info.email).toLowerCase(), name: String(info.name || '').slice(0, 80) };
-}
-function saveUserAndLogin(req, res, user) {
-  setUserCookie(req, res, user.id);
-  return sendJson(res, 200, { ok: true, user: publicUser(user) });
-}
-
 async function handleApi(req, res, pathname) {
   try {
-    if (req.method === 'GET' && pathname === '/api/auth/config') {
-      return sendJson(res, 200, { googleClientId: process.env.GOOGLE_CLIENT_ID || '' });
-    }
-
-    if (req.method === 'GET' && pathname === '/api/auth/me') {
-      const user = readUserSession(req);
-      return sendJson(res, 200, { user: user ? publicUser(user) : null });
-    }
-
-    if (req.method === 'POST' && pathname === '/api/auth/register') {
-      const body = await readJson(req, 8192);
-      const email = String(body.email || '').trim().toLowerCase();
-      const password = String(body.password || '');
-      const name = String(body.name || '').trim().slice(0, 80);
-      if (!validEmail(email)) return sendJson(res, 400, { error: 'সঠিক Email Address দিন' });
-      if (password.length < 8 || password.length > 128) return sendJson(res, 400, { error: 'Password কমপক্ষে ৮ অক্ষরের হতে হবে' });
-      if ((config.users || []).some(function (u) { return u.email === email; })) {
-        return sendJson(res, 409, { error: 'এই Email দিয়ে আগে অ্যাকাউন্ট খোলা হয়েছে। Login করুন।' });
-      }
-      const salt = crypto.randomBytes(16).toString('hex');
-      const user = { id: crypto.randomBytes(16).toString('hex'), email: email, name: name || email.split('@')[0],
-        salt: salt, passwordHash: makePasswordHash(password, salt), provider: 'email', createdAt: new Date().toISOString() };
-      const users = (config.users || []).concat(user).slice(-10000);
-      await commit(Object.assign({}, config, { users: users }), 'New customer account', [], []);
-      config.users = users;
-      return saveUserAndLogin(req, res, user);
-    }
-
-    if (req.method === 'POST' && pathname === '/api/auth/login') {
-      const ip = clientIp(req);
-      if (userLoginBlocked(ip)) return sendJson(res, 429, { error: 'অনেকবার চেষ্টা হয়েছে। ১৫ মিনিট পরে আবার চেষ্টা করুন।' });
-      const body = await readJson(req, 8192);
-      const email = String(body.email || '').trim().toLowerCase();
-      const password = String(body.password || '');
-      const user = (config.users || []).find(function (u) { return u.email === email && u.passwordHash && u.salt; });
-      const hash = user ? makePasswordHash(password, user.salt) : crypto.createHash('sha512').update('invalid-user-password').digest('hex');
-      if (!user || !safeEq(hash, user.passwordHash)) {
-        recordUserLoginFail(ip);
-        await new Promise(function (r) { setTimeout(r, 350); });
-        return sendJson(res, 401, { error: 'Email অথবা Password সঠিক নয়' });
-      }
-      userLoginAttempts.delete(ip);
-      return saveUserAndLogin(req, res, user);
-    }
-
-    if (req.method === 'POST' && pathname === '/api/auth/google') {
-      const body = await readJson(req, 16 * 1024);
-      const google = await verifyGoogleIdToken(body.credential);
-      let user = (config.users || []).find(function (u) { return u.email === google.email; });
-      if (user) {
-        user = Object.assign({}, user, { name: user.name || google.name, provider: user.provider || 'google' });
-      } else {
-        user = { id: crypto.randomBytes(16).toString('hex'), email: google.email, name: google.name || google.email.split('@')[0],
-          provider: 'google', createdAt: new Date().toISOString() };
-      }
-      const users = (config.users || []).filter(function (u) { return u.id !== user.id; }).concat(user).slice(-10000);
-      await commit(Object.assign({}, config, { users: users }), 'Google customer login', [], []);
-      config.users = users;
-      return saveUserAndLogin(req, res, user);
-    }
-
-    if (req.method === 'POST' && pathname === '/api/auth/logout') {
-      clearUserCookie(req, res);
-      return sendJson(res, 200, { ok: true });
-    }
-
     if (req.method === 'GET' && pathname === '/api/payments') {
       return sendJson(res, 200, paymentView());
     }
 
-    if (req.method === 'POST' && pathname === '/api/orders') {
-      const user = readUserSession(req);
-      if (!user) return sendJson(res, 401, { error: 'অর্ডার করতে আগে Login করুন' });
+    // Customer wallet and manual Add Money requests
+    if (req.method === 'GET' && pathname === '/api/add-money') {
+      const u = new URL(req.url, 'http://localhost');
+      const customerKey = u.searchParams.get('customer') || '';
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
+      const history = (config.deposits || []).filter(function (x) { return x.customerKey === customerKey; }).slice(-100).reverse().map(function (x) {
+        return { id:x.id, amount:x.amount, method:x.method, trxId:x.trxId, status:x.status, date:x.date, updated:x.updated };
+      });
+      return sendJson(res, 200, { balance:Number((config.balances || {})[customerKey] || 0), methods:paymentView().methods, history:history });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/add-money') {
       const body = await readJson(req, 8192);
+      const customerKey = String(body.customerKey || '');
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
+      const amount = Math.round(Number(body.amount) * 100) / 100;
+      if (!Number.isFinite(amount) || amount < 10 || amount > 50000) return sendJson(res, 400, { error: '১০ থেকে ৫০,০০০ টাকার মধ্যে Amount দিন।' });
+      const method = String(body.method || '');
+      if (!paymentView().methods.some(function (x) { return x.id === method; })) return sendJson(res, 400, { error: 'এই পেমেন্ট মাধ্যমটি চালু নেই।' });
+      const trxId = String(body.trxId || '').trim().replace(/\s+/g, '').slice(0, 80);
+      if (!/^[A-Za-z0-9-]{6,80}$/.test(trxId)) return sendJson(res, 400, { error: 'সঠিক Transaction ID দিন।' });
+      const duplicate = (config.orders || []).some(function (o) { return String(o.trxId || '').toLowerCase() === trxId.toLowerCase(); }) || (config.deposits || []).some(function (o) { return String(o.trxId || '').toLowerCase() === trxId.toLowerCase(); });
+      if (duplicate) return sendJson(res, 409, { error: 'এই Transaction ID আগে ব্যবহার করা হয়েছে।' });
+      const now = new Date().toISOString();
+      const deposit = { id:Date.now().toString(36).toUpperCase()+crypto.randomBytes(3).toString('hex').toUpperCase(), customerKey:customerKey, amount:amount, method:method, trxId:trxId, status:'Pending', date:now, updated:now };
+      const deposits = (config.deposits || []).concat(deposit).slice(-3000);
+      await commit(Object.assign({}, config, { deposits:deposits }), 'New Add Money request '+deposit.id, [], []);
+      return sendJson(res, 201, { ok:true, deposit:{ id:deposit.id, amount:deposit.amount, status:deposit.status, date:deposit.date } });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/orders') {
+      const body = await readJson(req, 8192);
+      const customerKey = String(body.customerKey || '');
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
       const product = String(body.product || '');
       const pkg = findServerPackage(product, String(body.packageName || ''));
       if (!pkg) return sendJson(res, 400, { error: 'প্যাকেজটি পাওয়া যায়নি। আবার প্যাকেজ নির্বাচন করুন।' });
@@ -866,8 +757,7 @@ async function handleApi(req, res, pathname) {
       const now = new Date().toISOString();
       const order = {
         id: Date.now().toString(36).toUpperCase() + crypto.randomBytes(3).toString('hex').toUpperCase(),
-        customerKey: '',
-        userId: user.id,
+        customerKey: customerKey,
         product: product,
         package: String(pkg.name || pkg.label).slice(0, 140),
         price: price,
@@ -887,9 +777,10 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/orders') {
-      const user = readUserSession(req);
-      if (!user) return sendJson(res, 401, { error: 'অর্ডার দেখতে আগে Login করুন' });
-      const orders = (config.orders || []).filter(function (o) { return o.userId === user.id; })
+      const u = new URL(req.url, 'http://localhost');
+      const customerKey = u.searchParams.get('customer') || '';
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
+      const orders = (config.orders || []).filter(function (o) { return o.customerKey === customerKey; })
         .slice(-100).reverse().map(function (o) {
           return { id: o.id, status: o.status, date: o.date, updated: o.updated,
             package: o.package, price: o.price, playerId: o.playerId };
@@ -930,6 +821,28 @@ async function handleApi(req, res, pathname) {
       });
       await commit(Object.assign({}, config, { payments: clean }), 'Update payment numbers', [], []);
       return sendJson(res, 200, currentView());
+    }
+
+    if (req.method === 'GET' && pathname === '/api/admin/deposits') {
+      return sendJson(res, 200, (config.deposits || []).slice(-500).reverse().map(function (x) {
+        return { id:x.id, amount:x.amount, method:x.method, trxId:x.trxId, status:x.status, date:x.date, updated:x.updated, customerKey:x.customerKey };
+      }));
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/deposit-status') {
+      const body = await readJson(req, 4096);
+      const id = String(body.id || '');
+      const status = String(body.status || '');
+      if (!id || ['Approved','Rejected'].indexOf(status) === -1) return sendJson(res, 400, { error:'Invalid input' });
+      const deposits = (config.deposits || []).slice();
+      const index = deposits.findIndex(function (x) { return x.id === id; });
+      if (index < 0 || deposits[index].status !== 'Pending') return sendJson(res, 409, { error:'অনুরোধটি পাওয়া যায়নি অথবা আগে প্রসেস হয়েছে।' });
+      const deposit = deposits[index];
+      const balances = Object.assign({}, config.balances || {});
+      if (status === 'Approved') balances[deposit.customerKey] = Math.round((Number(balances[deposit.customerKey] || 0) + Number(deposit.amount)) * 100) / 100;
+      deposits[index] = Object.assign({}, deposit, { status:status, updated:new Date().toISOString() });
+      await commit(Object.assign({}, config, { deposits:deposits, balances:balances }), 'Add Money '+status+' '+id, [], []);
+      return sendJson(res, 200, { ok:true, deposit:deposits[index], balance:Number(balances[deposit.customerKey] || 0) });
     }
 
     if (req.method === 'GET' && pathname === '/api/admin/orders') {

@@ -385,7 +385,8 @@ async function enter(){
 var SECTIONS=[
   {id:'site',title:'Site Editor',icon:'edit',render:renderSite},
   {id:'payments',title:'Payment Settings',icon:'wal',render:renderPayments},
-  {id:'orders',title:'Payment Orders',icon:'edit',render:renderOrders}
+  {id:'orders',title:'Payment Orders',icon:'edit',render:renderOrders},
+  {id:'deposits',title:'Add Money Requests',icon:'wal',render:renderDeposits}
 ];
 
 function openMenu(){
@@ -889,6 +890,33 @@ function renderPayments(root){
     }catch(e){toast(e.message,'bad')}
     btn.disabled=false;
   };
+}
+
+async function renderDeposits(root){
+  root.innerHTML='<div class="card"><h2><span class="n">1</span>Add Money Requests</h2><p class="d">Transaction ID যাচাই করে তারপর টাকা Wallet-এ যোগ করুন। একই অনুরোধ একবারই Approve করা যাবে।</p><button type="button" class="btn ghost" id="depRefresh">Refresh Requests</button><div id="depList" style="margin-top:12px"><div class="soon">Loading...</div></div></div>';
+  var list=$('#depList',root);
+  async function load(){
+    list.innerHTML='<div class="soon">Loading...</div>';
+    try{
+      var items=await api('/api/admin/deposits');
+      if(!items.length){list.innerHTML='<div class="soon">এখনো কোনো Add Money Request আসেনি।</div>';return;}
+      list.innerHTML='';
+      items.forEach(function(o){
+        var d=new Date(o.date), date=isNaN(d.getTime())?String(o.date||''):d.toLocaleString('en-GB');
+        var card=document.createElement('article');card.className='order-admin';
+        card.innerHTML='<div class="oa-head"><div class="oa-id">Deposit #'+esc(o.id)+'</div><span class="oa-status '+esc(o.status)+'">'+esc(o.status)+'</span></div><div class="oa-info"><div>Amount<b>৳'+Number(o.amount||0).toFixed(2)+'</b></div><div>Payment<b>'+esc(o.method)+'</b></div><div>Transaction ID<b>'+esc(o.trxId)+'</b></div><div>Customer key<b style="word-break:break-all">'+esc(o.customerKey)+'</b></div><div>Request time<b>'+esc(date)+'</b></div></div>';
+        if(o.status==='Pending'){
+          var actions=document.createElement('div');actions.className='oa-actions';
+          var yes=document.createElement('button');yes.type='button';yes.className='btn';yes.textContent='Approve & Add Balance';
+          var no=document.createElement('button');no.type='button';no.className='btn danger';no.textContent='Reject';
+          async function setStatus(status,button){if(!confirm('Deposit #'+o.id+' - '+status+'?'))return;button.disabled=true;try{await api('/api/admin/deposit-status',{id:o.id,status:status});toast(status==='Approved'?'টাকা Wallet-এ যোগ হয়েছে':'Request Rejected','ok');await load();}catch(e){toast(e.message,'bad');button.disabled=false;}}
+          yes.onclick=function(){setStatus('Approved',yes)};no.onclick=function(){setStatus('Rejected',no)};actions.appendChild(yes);actions.appendChild(no);card.appendChild(actions);
+        }
+        list.appendChild(card);
+      });
+    }catch(e){list.innerHTML='<div class="note bad">'+esc(e.message)+'</div>';}
+  }
+  $('#depRefresh',root).onclick=load;await load();
 }
 
 async function renderOrders(root){
