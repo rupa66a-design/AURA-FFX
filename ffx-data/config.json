@@ -22,5 +22,11 @@
   ],
   "images": null,
   "prod": null,
-  "texts": null
+  "texts": null,
+  "payments": {
+    "bKash": "01798547978",
+    "Rocket": "01798547978",
+    "Nagad": "01321730831"
+  },
+  "orders": []
 }
