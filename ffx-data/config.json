@@ -86,5 +86,11 @@
       "createdAt": "2026-11-14T02:45:51.179Z"
     }
   ],
-  "sessions": []
+  "sessions": [
+    {
+      "tokenHash": "e709b50b32b552f152a596ddcfa5e69251aaa8659050a9e5c34be7c9db55305a",
+      "userId": "235f1d137ca31d2397d547612eac3a020620f0e3",
+      "expires": 1797216352402
+    }
+  ]
 }
