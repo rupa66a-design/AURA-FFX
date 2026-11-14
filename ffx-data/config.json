@@ -58,15 +58,17 @@
       "updated": "2026-11-14T01:48:51.682Z"
     }
   ],
-  "users": [
+  "deposits": [
     {
-      "id": "7c8ed385811ca35d8f7e7a6178c24f40",
-      "email": "hxff7720@gmail.com",
-      "name": "RIFAT",
-      "salt": "053bb46a0a2bd98ebd08e4f120162655",
-      "passwordHash": "292697180e5c9b39d72b6c3e09533f0a4df8fd75299d26c61e379a1e6d15848510dfd7ec41c49d5fc01c83d30d483c09eda8edd6770466e47935a38930831d49",
-      "provider": "email",
-      "createdAt": "2026-11-14T01:40:57.086Z"
+      "id": "MWFSG629D5FD3C",
+      "customerKey": "1e2c64487a966fa2e9e253f68dab66739bda311d",
+      "amount": 100,
+      "method": "bKash",
+      "trxId": "ASHX61XVJ",
+      "status": "Pending",
+      "date": "2026-11-14T02:30:21.105Z",
+      "updated": "2026-11-14T02:30:21.105Z"
     }
-  ]
+  ],
+  "balances": {}
 }
