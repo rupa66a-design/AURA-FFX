@@ -3076,6 +3076,286 @@ setInterval(fetchFreshAccountConfig, 15000);
 #trxModal .trx-close{display:block;margin:10px auto 0;border:0;background:none;color:#666;padding:8px;font-weight:700}
 #trxModal .trx-small{font-size:12px;color:#665c6b;line-height:1.5}
 </style>
+
+<style>
+#auraAuth{position:fixed;inset:0;z-index:10050;background:rgba(7,15,35,.68);display:none;align-items:center;justify-content:center;padding:16px}
+#auraAuth.show{display:flex}
+#auraAuth .aa-card{width:100%;max-width:410px;background:#fff;border:1px solid #dbe5f5;border-radius:22px;padding:24px 20px;box-shadow:0 24px 70px #0004;max-height:92vh;overflow:auto}
+#auraAuth h2{text-align:center;font-size:22px;color:#172554;margin:2px 0 6px}
+#auraAuth .aa-sub{text-align:center;color:#64748b;font-size:13px;margin-bottom:18px}
+#auraAuth label{display:block;font-size:13px;font-weight:700;color:#334155;margin:12px 0 6px}
+#auraAuth input{width:100%;height:47px;border:1.5px solid #dbe3f0;border-radius:12px;padding:0 13px;font:inherit;outline:none}
+#auraAuth input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb18}
+#auraAuth .aa-primary{width:100%;height:47px;margin-top:16px;border:0;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-weight:800}
+#auraAuth .aa-switch{width:100%;border:0;background:none;color:#1d4ed8;font-weight:700;padding:14px 6px 2px}
+#auraAuth .aa-close{float:right;border:0;background:#f1f5f9;width:32px;height:32px;border-radius:50%;font-size:20px;color:#475569}
+#auraAuth .aa-error{min-height:18px;margin-top:9px;color:#dc2626;font-size:12.5px;text-align:center}
+#auraAuth .aa-or{display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:12px;margin:16px 0}
+#auraAuth .aa-or:before,#auraAuth .aa-or:after{content:"";height:1px;background:#e2e8f0;flex:1}
+#auraGoogle{display:flex;justify-content:center;min-height:42px}
+#auraAuth .aa-google-note{font-size:11px;color:#94a3b8;text-align:center;margin-top:5px}
+</style>
+<div id="auraAuth" aria-hidden="true">
+ <div class="aa-card" role="dialog" aria-modal="true" aria-labelledby="aaTitle">
+  <button class="aa-close" type="button" id="aaClose" aria-label="Close">×</button>
+  <h2 id="aaTitle">AURA FFX TRX</h2>
+  <p class="aa-sub" id="aaSub">আপনার অ্যাকাউন্টে Login করুন</p>
+  <form id="aaForm">
+   <div id="aaNameWrap" hidden>
+    <label for="aaName">আপনার নাম</label><input id="aaName" type="text" maxlength="80" autocomplete="name" placeholder="আপনার নাম">
+   </div>
+   <label for="aaEmail">Email Address</label>
+   <input id="aaEmail" type="email" required maxlength="254" autocomplete="email" placeholder="name@example.com">
+   <label for="aaPassword">Password</label>
+   <input id="aaPassword" type="password" required minlength="8" maxlength="128" autocomplete="current-password" placeholder="কমপক্ষে ৮ অক্ষর">
+   <div class="aa-error" id="aaError" role="alert"></div>
+   <button class="aa-primary" id="aaSubmit" type="submit">Login</button>
+  </form>
+  <button class="aa-switch" type="button" id="aaSwitch">নতুন অ্যাকাউন্ট খুলুন · Register</button>
+  <div class="aa-or">অথবা</div>
+  <div id="auraGoogle"></div>
+  <p class="aa-google-note" id="aaGoogleNote"></p>
+ </div>
+</div>
+<script>
+(function(){
+ 'use strict';
+ var modal=document.getElementById('auraAuth'), form=document.getElementById('aaForm');
+ var mode='login', user=null, afterLogin=null, googleReady=false;
+ function $(id){return document.getElementById(id);}
+ function toast(msg){
+  var t=$('toast'); if(t){t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2600);}
+ }
+ function api(url,body){
+  return fetch(url,{method:body?'POST':'GET',credentials:'same-origin',
+   headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined})
+   .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'Request failed');return j;});});
+ }
+ function profile(u){
+  user=u||null;
+  if(window.setProfile)window.setProfile(user?{loggedIn:true,name:user.name,email:user.email,verified:true,orders:0,codes:0}:{});
+  var n=$('accName'),m=$('accMail'),lo=$('accLo');
+  if(n)n.textContent=user?'Hi, '+(user.name||'User'):'Hi, Guest';
+  if(m)m.textContent=user?user.email:'লগইন করে অর্ডার করুন';
+  if(lo){lo.querySelector('span').textContent=user?'Logout':'Login';lo.querySelector('use').setAttribute('href',user?'#a-power':'#a-in');}
+  var tx=$('acLoTx');if(tx)tx.textContent=user?'Logout':'Login';
+ }
+ function open(callback){
+  afterLogin=typeof callback==='function'?callback:null;
+  modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+  $('aaError').textContent='';
+  setTimeout(function(){$('aaEmail').focus();},80);
+ }
+ function close(){modal.classList.remove('show');modal.setAttribute('aria-hidden','true');}
+ function setMode(next){
+  mode=next;
+  $('aaTitle').textContent=mode==='register'?'Create Account':'Welcome Back';
+  $('aaSub').textContent=mode==='register'?'নতুন অ্যাকাউন্ট তৈরি করুন':'আপনার অ্যাকাউন্টে Login করুন';
+  $('aaNameWrap').hidden=mode!=='register';
+  $('aaPassword').autocomplete=mode==='register'?'new-password':'current-password';
+  $('aaSubmit').textContent=mode==='register'?'Register':'Login';
+  $('aaSwitch').textContent=mode==='register'?'আগে অ্যাকাউন্ট আছে? Login করুন':'নতুন অ্যাকাউন্ট খুলুন · Register';
+  $('aaError').textContent='';
+ }
+ function done(u){
+  profile(u);close();toast('সফলভাবে Login হয়েছে');
+  window.dispatchEvent(new Event('aura-auth-ready'));
+  if(afterLogin){var cb=afterLogin;afterLogin=null;cb();}
+ }
+ form.addEventListener('submit',function(e){
+  e.preventDefault();
+  var body={email:$('aaEmail').value.trim(),password:$('aaPassword').value};
+  if(mode==='register')body.name=$('aaName').value.trim();
+  $('aaSubmit').disabled=true;$('aaSubmit').textContent='অপেক্ষা করুন...';$('aaError').textContent='';
+  api(mode==='register'?'/api/auth/register':'/api/auth/login',body)
+   .then(function(r){done(r.user);})
+   .catch(function(err){$('aaError').textContent=err.message;})
+   .finally(function(){$('aaSubmit').disabled=false;$('aaSubmit').textContent=mode==='register'?'Register':'Login';});
+ });
+ $('aaSwitch').onclick=function(){setMode(mode==='login'?'register':'login');};
+ $('aaClose').onclick=close;
+ modal.addEventListener('click',function(e){if(e.target===modal)close();});
+ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+ function googleCredential(response){
+  api('/api/auth/google',{credential:response.credential})
+   .then(function(r){done(r.user);})
+   .catch(function(err){$('aaError').textContent=err.message;});
+ }
+ function initGoogle(clientId){
+  if(!clientId){$('aaGoogleNote').textContent='Google Login চালু করতে সাইটের মালিককে Google OAuth Client ID সেট করতে হবে।';return;}
+  function start(){
+   if(!window.google||!google.accounts||!google.accounts.id)return;
+   google.accounts.id.initialize({client_id:clientId,callback:googleCredential});
+   google.accounts.id.renderButton($('auraGoogle'),{theme:'outline',size:'large',shape:'pill',text:'continue_with',width:300});
+   googleReady=true;
+  }
+  if(window.google&&google.accounts){start();return;}
+  var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.defer=true;s.onload=start;
+  s.onerror=function(){$('aaGoogleNote').textContent='Google Login লোড হয়নি। পরে চেষ্টা করুন।';};
+  document.head.appendChild(s);
+ }
+ window.AuraAuth={open:open,close:close,isLoggedIn:function(){return !!user;},getUser:function(){return user;},requireLogin:function(cb){if(user)return true;open(cb);return false;}};
+ api('/api/auth/config').then(function(c){initGoogle(c.googleClientId||'');}).catch(function(){initGoogle('');});
+ api('/api/auth/me').then(function(r){
+  profile(r.user);
+ }).catch(function(){profile(null);});
+ // Existing menu login/logout buttons now use the customer account session.
+ var menuLogin=$('accLo'), profileLogout=$('acLogout');
+ function logout(){
+  api('/api/auth/logout',{}).then(function(){profile(null);toast('Logout হয়েছে');})
+   .catch(function(err){toast(err.message);});
+ }
+ if(menuLogin)menuLogin.onclick=function(){if(user){logout();}else{setMode('login');open();}};
+ if(profileLogout)profileLogout.onclick=function(){if(user)logout();else{setMode('login');open();}};
+ // If customer visits orders without signing in, ask them to login first.
+ window.addEventListener('hashchange',function(){
+  if(location.hash==='#my-orders'&&!user){open(function(){loadOrdersAfterAuth();});}
+ });
+ function loadOrdersAfterAuth(){if(location.hash==='#my-orders')window.dispatchEvent(new Event('aura-auth-ready'));}
+ window.addEventListener('aura-auth-ready',function(){});
+})();
+</script>
+
+
+<style>
+#auraAuth{position:fixed;inset:0;z-index:10050;background:rgba(7,15,35,.68);display:none;align-items:center;justify-content:center;padding:16px}
+#auraAuth.show{display:flex}
+#auraAuth .aa-card{width:100%;max-width:410px;background:#fff;border:1px solid #dbe5f5;border-radius:22px;padding:24px 20px;box-shadow:0 24px 70px #0004;max-height:92vh;overflow:auto}
+#auraAuth h2{text-align:center;font-size:22px;color:#172554;margin:2px 0 6px}
+#auraAuth .aa-sub{text-align:center;color:#64748b;font-size:13px;margin-bottom:18px}
+#auraAuth label{display:block;font-size:13px;font-weight:700;color:#334155;margin:12px 0 6px}
+#auraAuth input{width:100%;height:47px;border:1.5px solid #dbe3f0;border-radius:12px;padding:0 13px;font:inherit;outline:none}
+#auraAuth input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb18}
+#auraAuth .aa-primary{width:100%;height:47px;margin-top:16px;border:0;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;font-weight:800}
+#auraAuth .aa-switch{width:100%;border:0;background:none;color:#1d4ed8;font-weight:700;padding:14px 6px 2px}
+#auraAuth .aa-close{float:right;border:0;background:#f1f5f9;width:32px;height:32px;border-radius:50%;font-size:20px;color:#475569}
+#auraAuth .aa-error{min-height:18px;margin-top:9px;color:#dc2626;font-size:12.5px;text-align:center}
+#auraAuth .aa-or{display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:12px;margin:16px 0}
+#auraAuth .aa-or:before,#auraAuth .aa-or:after{content:"";height:1px;background:#e2e8f0;flex:1}
+#auraGoogle{display:flex;justify-content:center;min-height:42px}
+#auraAuth .aa-google-note{font-size:11px;color:#94a3b8;text-align:center;margin-top:5px}
+</style>
+<div id="auraAuth" aria-hidden="true">
+ <div class="aa-card" role="dialog" aria-modal="true" aria-labelledby="aaTitle">
+  <button class="aa-close" type="button" id="aaClose" aria-label="Close">×</button>
+  <h2 id="aaTitle">AURA FFX TRX</h2>
+  <p class="aa-sub" id="aaSub">আপনার অ্যাকাউন্টে Login করুন</p>
+  <form id="aaForm">
+   <div id="aaNameWrap" hidden>
+    <label for="aaName">আপনার নাম</label><input id="aaName" type="text" maxlength="80" autocomplete="name" placeholder="আপনার নাম">
+   </div>
+   <label for="aaEmail">Email Address</label>
+   <input id="aaEmail" type="email" required maxlength="254" autocomplete="email" placeholder="name@example.com">
+   <label for="aaPassword">Password</label>
+   <input id="aaPassword" type="password" required minlength="8" maxlength="128" autocomplete="current-password" placeholder="কমপক্ষে ৮ অক্ষর">
+   <div class="aa-error" id="aaError" role="alert"></div>
+   <button class="aa-primary" id="aaSubmit" type="submit">Login</button>
+  </form>
+  <button class="aa-switch" type="button" id="aaSwitch">নতুন অ্যাকাউন্ট খুলুন · Register</button>
+  <div class="aa-or">অথবা</div>
+  <div id="auraGoogle"></div>
+  <p class="aa-google-note" id="aaGoogleNote"></p>
+ </div>
+</div>
+<script>
+(function(){
+ 'use strict';
+ var modal=document.getElementById('auraAuth'), form=document.getElementById('aaForm');
+ var mode='login', user=null, afterLogin=null, googleReady=false;
+ function $(id){return document.getElementById(id);}
+ function toast(msg){
+  var t=$('toast'); if(t){t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2600);}
+ }
+ function api(url,body){
+  return fetch(url,{method:body?'POST':'GET',credentials:'same-origin',
+   headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined})
+   .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'Request failed');return j;});});
+ }
+ function profile(u){
+  user=u||null;
+  if(window.setProfile)window.setProfile(user?{loggedIn:true,name:user.name,email:user.email,verified:true,orders:0,codes:0}:{});
+  var n=$('accName'),m=$('accMail'),lo=$('accLo');
+  if(n)n.textContent=user?'Hi, '+(user.name||'User'):'Hi, Guest';
+  if(m)m.textContent=user?user.email:'লগইন করে অর্ডার করুন';
+  if(lo){lo.querySelector('span').textContent=user?'Logout':'Login';lo.querySelector('use').setAttribute('href',user?'#a-power':'#a-in');}
+  var tx=$('acLoTx');if(tx)tx.textContent=user?'Logout':'Login';
+ }
+ function open(callback){
+  afterLogin=typeof callback==='function'?callback:null;
+  modal.classList.add('show');modal.setAttribute('aria-hidden','false');
+  $('aaError').textContent='';
+  setTimeout(function(){$('aaEmail').focus();},80);
+ }
+ function close(){modal.classList.remove('show');modal.setAttribute('aria-hidden','true');}
+ function setMode(next){
+  mode=next;
+  $('aaTitle').textContent=mode==='register'?'Create Account':'Welcome Back';
+  $('aaSub').textContent=mode==='register'?'নতুন অ্যাকাউন্ট তৈরি করুন':'আপনার অ্যাকাউন্টে Login করুন';
+  $('aaNameWrap').hidden=mode!=='register';
+  $('aaPassword').autocomplete=mode==='register'?'new-password':'current-password';
+  $('aaSubmit').textContent=mode==='register'?'Register':'Login';
+  $('aaSwitch').textContent=mode==='register'?'আগে অ্যাকাউন্ট আছে? Login করুন':'নতুন অ্যাকাউন্ট খুলুন · Register';
+  $('aaError').textContent='';
+ }
+ function done(u){
+  profile(u);close();toast('সফলভাবে Login হয়েছে');
+  window.dispatchEvent(new Event('aura-auth-ready'));
+  if(afterLogin){var cb=afterLogin;afterLogin=null;cb();}
+ }
+ form.addEventListener('submit',function(e){
+  e.preventDefault();
+  var body={email:$('aaEmail').value.trim(),password:$('aaPassword').value};
+  if(mode==='register')body.name=$('aaName').value.trim();
+  $('aaSubmit').disabled=true;$('aaSubmit').textContent='অপেক্ষা করুন...';$('aaError').textContent='';
+  api(mode==='register'?'/api/auth/register':'/api/auth/login',body)
+   .then(function(r){done(r.user);})
+   .catch(function(err){$('aaError').textContent=err.message;})
+   .finally(function(){$('aaSubmit').disabled=false;$('aaSubmit').textContent=mode==='register'?'Register':'Login';});
+ });
+ $('aaSwitch').onclick=function(){setMode(mode==='login'?'register':'login');};
+ $('aaClose').onclick=close;
+ modal.addEventListener('click',function(e){if(e.target===modal)close();});
+ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+ function googleCredential(response){
+  api('/api/auth/google',{credential:response.credential})
+   .then(function(r){done(r.user);})
+   .catch(function(err){$('aaError').textContent=err.message;});
+ }
+ function initGoogle(clientId){
+  if(!clientId){$('aaGoogleNote').textContent='Google Login চালু করতে সাইটের মালিককে Google OAuth Client ID সেট করতে হবে।';return;}
+  function start(){
+   if(!window.google||!google.accounts||!google.accounts.id)return;
+   google.accounts.id.initialize({client_id:clientId,callback:googleCredential});
+   google.accounts.id.renderButton($('auraGoogle'),{theme:'outline',size:'large',shape:'pill',text:'continue_with',width:300});
+   googleReady=true;
+  }
+  if(window.google&&google.accounts){start();return;}
+  var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.defer=true;s.onload=start;
+  s.onerror=function(){$('aaGoogleNote').textContent='Google Login লোড হয়নি। পরে চেষ্টা করুন।';};
+  document.head.appendChild(s);
+ }
+ window.AuraAuth={open:open,close:close,isLoggedIn:function(){return !!user;},getUser:function(){return user;},requireLogin:function(cb){if(user)return true;open(cb);return false;}};
+ api('/api/auth/config').then(function(c){initGoogle(c.googleClientId||'');}).catch(function(){initGoogle('');});
+ api('/api/auth/me').then(function(r){
+  profile(r.user);
+ }).catch(function(){profile(null);});
+ // Existing menu login/logout buttons now use the customer account session.
+ var menuLogin=$('accLo'), profileLogout=$('acLogout');
+ function logout(){
+  api('/api/auth/logout',{}).then(function(){profile(null);toast('Logout হয়েছে');})
+   .catch(function(err){toast(err.message);});
+ }
+ if(menuLogin)menuLogin.onclick=function(){if(user){logout();}else{setMode('login');open();}};
+ if(profileLogout)profileLogout.onclick=function(){if(user)logout();else{setMode('login');open();}};
+ // If customer visits orders without signing in, ask them to login first.
+ window.addEventListener('hashchange',function(){
+  if(location.hash==='#my-orders'&&!user){open(function(){loadOrdersAfterAuth();});}
+ });
+ function loadOrdersAfterAuth(){if(location.hash==='#my-orders')window.dispatchEvent(new Event('aura-auth-ready'));}
+ window.addEventListener('aura-auth-ready',function(){});
+})();
+</script>
+
 <div id="trxModal" aria-hidden="true">
  <div class="trx-sheet" role="dialog" aria-modal="true" aria-labelledby="trxTitle">
   <h2 id="trxTitle">পেমেন্ট সম্পন্ন করুন</h2>
@@ -3110,17 +3390,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   {id:'luView',product:'lu',input:'luInp'},
   {id:'inView',product:'in',input:'inInp'}
  ];
- function customerKey(){
-  var k='aura_ffx_customer';
-  try{
-   var v=localStorage.getItem(k);
-   if(!/^[a-f0-9]{32,64}$/i.test(v||'')){
-    v='';for(var i=0;i<40;i++)v+='0123456789abcdef'[Math.floor(Math.random()*16)];
-    localStorage.setItem(k,v);
-   }
-   return v;
-  }catch(e){return '';}
- }
+ function customerLoggedIn(){return !!(window.AuraAuth&&window.AuraAuth.isLoggedIn());}
  function toast(m){
   var el=document.getElementById('toast');
   if(el){el.textContent=m;el.classList.add('show');setTimeout(function(){el.classList.remove('show')},2600);}
@@ -3139,6 +3409,10 @@ setInterval(fetchFreshAccountConfig, 15000);
   var inp=document.getElementById(view.input),playerId=inp?inp.value.trim():'';
   if(!/^\d{6,20}$/.test(playerId)){toast('সঠিক Player ID দিন');if(inp)inp.focus();return;}
   current={product:view.product,packageName:pk.dataset.name,price:Number(pk.dataset.price),playerId:playerId};
+  if(!customerLoggedIn()){
+   window.AuraAuth.requireLogin(function(){openFor(button);});
+   return;
+  }
   document.getElementById('trxPackage').textContent=current.packageName;
   document.getElementById('trxPrice').textContent='৳'+current.price.toFixed(2);
   document.getElementById('trxAmount').value=current.price;
@@ -3186,16 +3460,16 @@ setInterval(fetchFreshAccountConfig, 15000);
   if(!selected){toast('পেমেন্ট মাধ্যম চালু নেই');return;}
   if(Math.round(amount*100)!==Math.round(current.price*100)){toast('সঠিক Amount লিখুন');return;}
   if(!trxId){toast('Transaction ID দিন');document.getElementById('trxId').focus();return;}
-  var key=customerKey();if(!key){toast('এই ব্রাউজারে অর্ডার সেভ করা যাচ্ছে না');return;}
+  if(!customerLoggedIn()){window.AuraAuth.open();return;}
   busy=true;var btn=this;btn.disabled=true;btn.textContent='অপেক্ষা করুন...';
-  api('/api/orders',{customerKey:key,product:current.product,packageName:current.packageName,playerId:current.playerId,method:selected,trxId:trxId,amount:amount})
+  api('/api/orders',{product:current.product,packageName:current.packageName,playerId:current.playerId,method:selected,trxId:trxId,amount:amount})
    .then(function(r){close();toast('অর্ডার জমা হয়েছে। Order ID: '+r.order.id);if(location.hash==='#my-orders')loadMyOrders();})
    .catch(function(e){toast(e.message);})
    .finally(function(){busy=false;btn.disabled=false;btn.textContent='VERIFY & SUBMIT';});
  };
  function loadMyOrders(){
-  var key=customerKey();if(!key)return;
-  api('/api/orders?customer='+encodeURIComponent(key)).then(function(items){if(window.renderOrders)window.renderOrders(items);}).catch(function(){});
+  if(!customerLoggedIn()){if(window.AuraAuth)window.AuraAuth.open();return;}
+  api('/api/orders').then(function(items){if(window.renderOrders)window.renderOrders(items);}).catch(function(e){toast(e.message);});
  }
  window.addEventListener('hashchange',function(){if(location.hash==='#my-orders')loadMyOrders();});
  if(location.hash==='#my-orders')loadMyOrders();

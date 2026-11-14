@@ -85,7 +85,7 @@ const TEXTS = [
   { id: 'playUrl', label: 'Google Play link', def: '', max: 300, url: true }
 ];
 
-function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [] }; }
+function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [], users: [] }; }
 let config = emptyCfg();
 function imgGet(c, k) { return (k === 'logo' || k === 'ffBanner') ? c[k] : ((c.images && c.images[k]) || null); }
 function imgSet(next, k, v) {
@@ -207,6 +207,12 @@ function loadLocal() {
       config.orders = j.orders.filter(function (o) {
         return o && typeof o.id === 'string' && typeof o.customerKey === 'string';
       }).slice(-2000);
+    }
+    if (Array.isArray(j.users)) {
+      config.users = j.users.filter(function (u) {
+        return u && typeof u.id === 'string' && typeof u.email === 'string' &&
+          typeof u.salt === 'string' && typeof u.passwordHash === 'string';
+      }).slice(-10000);
     }
   } catch (e) {}
   cfgVersion++;
@@ -498,6 +504,7 @@ function applySiteConfig(html) {
   }
   html = applyProducts(html);
   html = applyTexts(html, inj);
+  inj.push('window.AURA_GOOGLE_CLIENT_ID = ' + jsStr(process.env.GOOGLE_CLIENT_ID || '') + ';');
   if (inj.length) html = html.replace('window.ACCOUNT_CONFIG = window.ACCOUNT_CONFIG || {};', function (m) { return m + '\n' + inj.join('\n'); });
   return html;
 }
@@ -683,16 +690,160 @@ function findServerPackage(productKey, packageName) {
   })[0] || null;
 }
 
+
+// Customer authentication: signed HttpOnly cookie + scrypt password hashes.
+const AUTH_SECRET = crypto.createHash('sha256').update(
+  'aura-user-auth:' + (process.env.AURA_AUTH_SECRET || process.env.FFX_PASS || process.env.FFX_G || crypto.randomBytes(32).toString('hex'))
+).digest();
+const USER_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+const userLoginAttempts = new Map();
+function userLoginBlocked(ip) {
+  const now = Date.now(), item = userLoginAttempts.get(ip);
+  if (!item || now - item.start > 15 * 60 * 1000) { userLoginAttempts.set(ip, { count: 0, start: now }); return false; }
+  return item.count >= 10;
+}
+function recordUserLoginFail(ip) {
+  const now = Date.now(), item = userLoginAttempts.get(ip);
+  if (!item || now - item.start > 15 * 60 * 1000) userLoginAttempts.set(ip, { count: 1, start: now });
+  else item.count++;
+}
+
+function cookieValue(req, name) {
+  const raw = req.headers.cookie || '';
+  const part = raw.split(';').map(function (x) { return x.trim(); }).filter(function (x) { return x.indexOf(name + '=') === 0; })[0];
+  return part ? decodeURIComponent(part.slice(name.length + 1)) : '';
+}
+function userSign(payload) {
+  return crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+}
+function makeUserSession(userId) {
+  const payload = Buffer.from(JSON.stringify({ sub: userId, exp: Date.now() + USER_SESSION_MS })).toString('base64url');
+  return payload + '.' + userSign(payload);
+}
+function readUserSession(req) {
+  const token = cookieValue(req, 'aura_user_session');
+  const parts = token.split('.');
+  if (parts.length !== 2 || !safeEq(parts[1], userSign(parts[0]))) return null;
+  try {
+    const p = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    if (!p.sub || !Number.isFinite(p.exp) || p.exp < Date.now()) return null;
+    return (config.users || []).find(function (u) { return u.id === p.sub; }) || null;
+  } catch (_) { return null; }
+}
+function setUserCookie(req, res, userId) {
+  const secure = req.headers['x-forwarded-proto'] === 'https' || !!req.socket.encrypted;
+  const token = makeUserSession(userId);
+  res.setHeader('Set-Cookie', 'aura_user_session=' + encodeURIComponent(token) +
+    '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + Math.floor(USER_SESSION_MS / 1000) + (secure ? '; Secure' : ''));
+}
+function clearUserCookie(req, res) {
+  const secure = req.headers['x-forwarded-proto'] === 'https' || !!req.socket.encrypted;
+  res.setHeader('Set-Cookie', 'aura_user_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (secure ? '; Secure' : ''));
+}
+function publicUser(u) {
+  return { id: u.id, name: u.name || u.email.split('@')[0], email: u.email, provider: u.provider || 'email' };
+}
+function makePasswordHash(password, salt) {
+  return crypto.scryptSync(password, salt, 64).toString('hex');
+}
+function validEmail(email) {
+  return typeof email === 'string' && email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+async function verifyGoogleIdToken(idToken) {
+  if (!process.env.GOOGLE_CLIENT_ID) throw new Error('Google Login চালু করতে Render Environment-এ GOOGLE_CLIENT_ID সেট করুন');
+  if (typeof idToken !== 'string' || idToken.length > 10000) throw new Error('Google token ঠিক নেই');
+  const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken);
+  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw new Error('Google Login যাচাই করা যায়নি');
+  const info = await response.json();
+  if (info.aud !== process.env.GOOGLE_CLIENT_ID || info.email_verified !== 'true' ||
+      !validEmail(info.email) || (info.exp && Number(info.exp) * 1000 < Date.now())) {
+    throw new Error('Google Account যাচাই ব্যর্থ হয়েছে');
+  }
+  return { email: String(info.email).toLowerCase(), name: String(info.name || '').slice(0, 80) };
+}
+function saveUserAndLogin(req, res, user) {
+  setUserCookie(req, res, user.id);
+  return sendJson(res, 200, { ok: true, user: publicUser(user) });
+}
+
 async function handleApi(req, res, pathname) {
   try {
+    if (req.method === 'GET' && pathname === '/api/auth/config') {
+      return sendJson(res, 200, { googleClientId: process.env.GOOGLE_CLIENT_ID || '' });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/auth/me') {
+      const user = readUserSession(req);
+      return sendJson(res, 200, { user: user ? publicUser(user) : null });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const body = await readJson(req, 8192);
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      const name = String(body.name || '').trim().slice(0, 80);
+      if (!validEmail(email)) return sendJson(res, 400, { error: 'সঠিক Email Address দিন' });
+      if (password.length < 8 || password.length > 128) return sendJson(res, 400, { error: 'Password কমপক্ষে ৮ অক্ষরের হতে হবে' });
+      if ((config.users || []).some(function (u) { return u.email === email; })) {
+        return sendJson(res, 409, { error: 'এই Email দিয়ে আগে অ্যাকাউন্ট খোলা হয়েছে। Login করুন।' });
+      }
+      const salt = crypto.randomBytes(16).toString('hex');
+      const user = { id: crypto.randomBytes(16).toString('hex'), email: email, name: name || email.split('@')[0],
+        salt: salt, passwordHash: makePasswordHash(password, salt), provider: 'email', createdAt: new Date().toISOString() };
+      const users = (config.users || []).concat(user).slice(-10000);
+      await commit(Object.assign({}, config, { users: users }), 'New customer account', [], []);
+      config.users = users;
+      return saveUserAndLogin(req, res, user);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const ip = clientIp(req);
+      if (userLoginBlocked(ip)) return sendJson(res, 429, { error: 'অনেকবার চেষ্টা হয়েছে। ১৫ মিনিট পরে আবার চেষ্টা করুন।' });
+      const body = await readJson(req, 8192);
+      const email = String(body.email || '').trim().toLowerCase();
+      const password = String(body.password || '');
+      const user = (config.users || []).find(function (u) { return u.email === email && u.passwordHash && u.salt; });
+      const hash = user ? makePasswordHash(password, user.salt) : crypto.createHash('sha512').update('invalid-user-password').digest('hex');
+      if (!user || !safeEq(hash, user.passwordHash)) {
+        recordUserLoginFail(ip);
+        await new Promise(function (r) { setTimeout(r, 350); });
+        return sendJson(res, 401, { error: 'Email অথবা Password সঠিক নয়' });
+      }
+      userLoginAttempts.delete(ip);
+      return saveUserAndLogin(req, res, user);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/google') {
+      const body = await readJson(req, 16 * 1024);
+      const google = await verifyGoogleIdToken(body.credential);
+      let user = (config.users || []).find(function (u) { return u.email === google.email; });
+      if (user) {
+        user = Object.assign({}, user, { name: user.name || google.name, provider: user.provider || 'google' });
+      } else {
+        user = { id: crypto.randomBytes(16).toString('hex'), email: google.email, name: google.name || google.email.split('@')[0],
+          provider: 'google', createdAt: new Date().toISOString() };
+      }
+      const users = (config.users || []).filter(function (u) { return u.id !== user.id; }).concat(user).slice(-10000);
+      await commit(Object.assign({}, config, { users: users }), 'Google customer login', [], []);
+      config.users = users;
+      return saveUserAndLogin(req, res, user);
+    }
+
+    if (req.method === 'POST' && pathname === '/api/auth/logout') {
+      clearUserCookie(req, res);
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (req.method === 'GET' && pathname === '/api/payments') {
       return sendJson(res, 200, paymentView());
     }
 
     if (req.method === 'POST' && pathname === '/api/orders') {
+      const user = readUserSession(req);
+      if (!user) return sendJson(res, 401, { error: 'অর্ডার করতে আগে Login করুন' });
       const body = await readJson(req, 8192);
-      const customerKey = String(body.customerKey || '');
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
       const product = String(body.product || '');
       const pkg = findServerPackage(product, String(body.packageName || ''));
       if (!pkg) return sendJson(res, 400, { error: 'প্যাকেজটি পাওয়া যায়নি। আবার প্যাকেজ নির্বাচন করুন।' });
@@ -715,7 +866,8 @@ async function handleApi(req, res, pathname) {
       const now = new Date().toISOString();
       const order = {
         id: Date.now().toString(36).toUpperCase() + crypto.randomBytes(3).toString('hex').toUpperCase(),
-        customerKey: customerKey,
+        customerKey: '',
+        userId: user.id,
         product: product,
         package: String(pkg.name || pkg.label).slice(0, 140),
         price: price,
@@ -735,10 +887,9 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/orders') {
-      const u = new URL(req.url, 'http://localhost');
-      const customerKey = u.searchParams.get('customer') || '';
-      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
-      const orders = (config.orders || []).filter(function (o) { return o.customerKey === customerKey; })
+      const user = readUserSession(req);
+      if (!user) return sendJson(res, 401, { error: 'অর্ডার দেখতে আগে Login করুন' });
+      const orders = (config.orders || []).filter(function (o) { return o.userId === user.id; })
         .slice(-100).reverse().map(function (o) {
           return { id: o.id, status: o.status, date: o.date, updated: o.updated,
             package: o.package, price: o.price, playerId: o.playerId };
