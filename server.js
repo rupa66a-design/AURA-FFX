@@ -75,7 +75,7 @@ const IMAGES = {
 const IMG_KEYS = Object.keys(IMAGES);
 
 const TEXTS = [
-  { id: 'siteName', label: 'Website name', def: 'Nickname', max: 40 },
+  { id: 'siteName', label: 'Website name', def: 'AURA FFX TRX', max: 40 },
   { id: 'sec1', label: 'Home section title (top)', def: 'FREE FIRE TOPUP', max: 60, wrap: ['<em>', '</em>'] },
   { id: 'sec2', label: 'Home section title (UID Checker)', def: 'UID CHECKER', max: 60, wrap: ['<em>', '</em>'] },
   { id: 'pop', label: 'Popup message', def: 'সবথেকে কম দামে টপ করার জন্য সেরা ওয়েবসাইট\n১০০% বিশ্বস্ত ও দ্রুত ডেলিভারিতে\nঅর্ডার করুন নিশ্চিন্তে 🥰', max: 400, multi: true },
@@ -85,7 +85,7 @@ const TEXTS = [
   { id: 'playUrl', label: 'Google Play link', def: '', max: 300, url: true }
 ];
 
-function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null }; }
+function emptyCfg() { return { logo: null, ffBanner: null, banners: null, quick: null, images: null, prod: null, texts: null, payments: { bKash: '', Rocket: '', Nagad: '' }, orders: [] }; }
 let config = emptyCfg();
 function imgGet(c, k) { return (k === 'logo' || k === 'ffBanner') ? c[k] : ((c.images && c.images[k]) || null); }
 function imgSet(next, k, v) {
@@ -196,6 +196,18 @@ function loadLocal() {
       config.banners = b.length ? b : null;
     }
     if (j.quick) config.quick = sanitizeQuick(j.quick);
+    if (j.payments && typeof j.payments === 'object') {
+      config.payments = {
+        bKash: String(j.payments.bKash || '').replace(/[^0-9+]/g, '').slice(0, 20),
+        Rocket: String(j.payments.Rocket || '').replace(/[^0-9+]/g, '').slice(0, 20),
+        Nagad: String(j.payments.Nagad || '').replace(/[^0-9+]/g, '').slice(0, 20)
+      };
+    }
+    if (Array.isArray(j.orders)) {
+      config.orders = j.orders.filter(function (o) {
+        return o && typeof o.id === 'string' && typeof o.customerKey === 'string';
+      }).slice(-2000);
+    }
   } catch (e) {}
   cfgVersion++;
   renderCache = null;
@@ -436,7 +448,7 @@ function applyTexts(html, inj) {
   const T = config.texts || {};
   if (T.siteName) {
     const v = esc(T.siteName);
-    html = html.split('<title>Nickname</title>').join('<title>' + v + '</title>')
+    html = html.split('<title>AURA FFX TRX</title>').join('<title>' + v + '</title>')
       .split('data-site-name>Nickname<').join('data-site-name>' + v + '<')
       .split('alt="Nickname"').join('alt="' + v + '"')
       .split("(typeof website_name !== 'undefined'").join("(window.__SITE ? window.__SITE : typeof website_name !== 'undefined'");
@@ -627,6 +639,7 @@ function currentView() {
     bannersCustom: !!config.banners,
     quick: config.quick || DEFAULT_QUICK,
     quickCustom: !!config.quick,
+    payments: Object.assign({ bKash: '', Rocket: '', Nagad: '' }, config.payments || {}),
     maxBanners: MAX_BANNERS,
     storage: { mode: storage.mode, ok: storage.ok, error: storage.error, repo: storage.repo, branch: storage.branch },
     persistent: USE_GH || !!process.env.DATA_DIR
@@ -644,8 +657,95 @@ function removeUpload(name) {
   if (name && SAFE_FILE.test(name)) fs.unlink(path.join(UPLOAD_DIR, name), function () {});
 }
 
+function paymentView() {
+  const p = config.payments || {};
+  return {
+    methods: [
+      { id: 'bKash', name: 'bKash', number: p.bKash || '' },
+      { id: 'Rocket', name: 'Rocket', number: p.Rocket || '' },
+      { id: 'Nagad', name: 'Nagad', number: p.Nagad || '' }
+    ].filter(function (x) { return !!x.number; })
+  };
+}
+
+function validCustomerKey(v) {
+  return typeof v === 'string' && /^[a-f0-9]{32,64}$/i.test(v);
+}
+
+function findServerPackage(productKey, packageName) {
+  const p = PRODUCTS.filter(function (x) { return x.key === productKey && x.grid; })[0];
+  if (!p) return null;
+  const defaults = getDefaults()[productKey] || {};
+  const custom = (config.prod || {})[productKey] || {};
+  const list = Array.isArray(custom.packages) ? custom.packages : defaults.packages;
+  return (list || []).filter(function (x) {
+    return x.name === packageName || x.label === packageName;
+  })[0] || null;
+}
+
 async function handleApi(req, res, pathname) {
   try {
+    if (req.method === 'GET' && pathname === '/api/payments') {
+      return sendJson(res, 200, paymentView());
+    }
+
+    if (req.method === 'POST' && pathname === '/api/orders') {
+      const body = await readJson(req, 8192);
+      const customerKey = String(body.customerKey || '');
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই। পেজ রিফ্রেশ করুন।' });
+      const product = String(body.product || '');
+      const pkg = findServerPackage(product, String(body.packageName || ''));
+      if (!pkg) return sendJson(res, 400, { error: 'প্যাকেজটি পাওয়া যায়নি। আবার প্যাকেজ নির্বাচন করুন।' });
+      const playerId = String(body.playerId || '').trim();
+      if (!/^\d{6,20}$/.test(playerId)) return sendJson(res, 400, { error: 'সঠিক Player ID দিন।' });
+      const method = String(body.method || '');
+      const pay = paymentView().methods.filter(function (x) { return x.id === method; })[0];
+      if (!pay) return sendJson(res, 400, { error: 'এই পেমেন্ট মাধ্যমটি এখন চালু নেই।' });
+      const trxId = String(body.trxId || '').trim().replace(/\s+/g, '').slice(0, 80);
+      if (!/^[A-Za-z0-9-]{6,80}$/.test(trxId)) return sendJson(res, 400, { error: 'সঠিক Transaction ID দিন।' });
+      const amount = Number(body.amount);
+      const price = Number(pkg.price);
+      if (!Number.isFinite(amount) || Math.round(amount * 100) !== Math.round(price * 100)) {
+        return sendJson(res, 400, { error: 'পেমেন্টের Amount প্যাকেজের দামের সঙ্গে মিলছে না।' });
+      }
+      const duplicate = (config.orders || []).some(function (o) {
+        return String(o.trxId || '').toLowerCase() === trxId.toLowerCase();
+      });
+      if (duplicate) return sendJson(res, 409, { error: 'এই Transaction ID আগে ব্যবহার করা হয়েছে।' });
+      const now = new Date().toISOString();
+      const order = {
+        id: Date.now().toString(36).toUpperCase() + crypto.randomBytes(3).toString('hex').toUpperCase(),
+        customerKey: customerKey,
+        product: product,
+        package: String(pkg.name || pkg.label).slice(0, 140),
+        price: price,
+        playerId: playerId,
+        method: method,
+        trxId: trxId,
+        status: 'Pending',
+        date: now,
+        updated: now
+      };
+      const orders = (config.orders || []).concat(order).slice(-2000);
+      await commit(Object.assign({}, config, { orders: orders }), 'New payment order ' + order.id, [], []);
+      return sendJson(res, 201, { ok: true, order: {
+        id: order.id, status: order.status, date: order.date,
+        package: order.package, price: order.price, playerId: order.playerId
+      }});
+    }
+
+    if (req.method === 'GET' && pathname === '/api/orders') {
+      const u = new URL(req.url, 'http://localhost');
+      const customerKey = u.searchParams.get('customer') || '';
+      if (!validCustomerKey(customerKey)) return sendJson(res, 400, { error: 'সেশন তথ্য ঠিক নেই।' });
+      const orders = (config.orders || []).filter(function (o) { return o.customerKey === customerKey; })
+        .slice(-100).reverse().map(function (o) {
+          return { id: o.id, status: o.status, date: o.date, updated: o.updated,
+            package: o.package, price: o.price, playerId: o.playerId };
+        });
+      return sendJson(res, 200, orders);
+    }
+
     if (req.method === 'POST' && pathname === '/api/admin/login') {
       if (!ADMIN_PASSWORD) return sendJson(res, 503, { error: 'Render এ FFX-PASS সেট করা নেই। Environment এ FFX-PASS যোগ করে আবার Deploy করুন।' });
       const ip = clientIp(req);
@@ -667,6 +767,43 @@ async function handleApi(req, res, pathname) {
 
     if (req.method === 'GET' && pathname === '/api/admin/config') {
       return sendJson(res, 200, currentView());
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/payments') {
+      const body = await readJson(req, 4096);
+      const clean = {};
+      ['bKash', 'Rocket', 'Nagad'].forEach(function (k) {
+        const v = String((body.payments || {})[k] || '').trim();
+        if (v && !/^\+?\d{8,20}$/.test(v)) throw new Error(k + ' নম্বর ৮-২০ ডিজিটের হতে হবে');
+        clean[k] = v;
+      });
+      await commit(Object.assign({}, config, { payments: clean }), 'Update payment numbers', [], []);
+      return sendJson(res, 200, currentView());
+    }
+
+    if (req.method === 'GET' && pathname === '/api/admin/orders') {
+      return sendJson(res, 200, (config.orders || []).slice(-300).reverse().map(function (o) {
+        return { id: o.id, product: o.product, package: o.package, price: o.price,
+          playerId: o.playerId, method: o.method, trxId: o.trxId, status: o.status,
+          date: o.date, updated: o.updated };
+      }));
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/order-status') {
+      const body = await readJson(req, 4096);
+      const id = String(body.id || '');
+      const status = String(body.status || '');
+      if (!id || ['Approved', 'Rejected'].indexOf(status) === -1) {
+        return sendJson(res, 400, { error: 'Invalid input' });
+      }
+      const orders = (config.orders || []).slice();
+      const index = orders.findIndex(function (o) { return o.id === id; });
+      if (index < 0 || orders[index].status !== 'Pending') {
+        return sendJson(res, 409, { error: 'অর্ডার পাওয়া যায়নি অথবা আগে প্রসেস হয়েছে।' });
+      }
+      orders[index] = Object.assign({}, orders[index], { status: status, updated: new Date().toISOString() });
+      await commit(Object.assign({}, config, { orders: orders }), 'Update order status ' + id, [], []);
+      return sendJson(res, 200, { ok: true, order: orders[index] });
     }
 
     if (req.method === 'POST' && pathname === '/api/admin/packages') {

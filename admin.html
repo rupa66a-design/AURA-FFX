@@ -242,6 +242,21 @@ main.sm{max-width:520px;padding:0}
 .g2 .lb{margin-top:0!important}
 .rl-row .ta{min-height:72px;background:#fff}
 .bn-row{background:#f6f9ff}
+
+.pay-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:600px){.pay-grid{grid-template-columns:1fr}}
+.order-admin{border:1px solid var(--bd);border-radius:16px;padding:14px;margin:12px 0;background:#fff}
+.order-admin .oa-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.order-admin .oa-id{font-weight:800;font-size:14px;overflow-wrap:anywhere}
+.order-admin .oa-status{font-size:12px;font-weight:800;padding:5px 10px;border-radius:999px;background:#fff7ed;color:#9a3412}
+.order-admin .oa-status.Approved{background:#dcfce7;color:#166534}
+.order-admin .oa-status.Rejected{background:#fee2e2;color:#991b1b}
+.order-admin .oa-info{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;color:var(--mu);font-size:13px}
+.order-admin .oa-info b{display:block;color:var(--tx);overflow-wrap:anywhere}
+.order-admin .oa-actions{display:flex;gap:8px;flex-wrap:wrap}
+.order-admin .oa-actions .btn{height:38px;font-size:13px}
+.order-admin .oa-actions .btn.danger{background:#fff;color:var(--err);border:1px solid #fecaca;box-shadow:none}
+
 </style>
 </head>
 <body>
@@ -368,7 +383,9 @@ async function enter(){
 }
 
 var SECTIONS=[
-  {id:'site',title:'Site Editor',icon:'edit',render:renderSite}
+  {id:'site',title:'Site Editor',icon:'edit',render:renderSite},
+  {id:'payments',title:'Payment Settings',icon:'wal',render:renderPayments},
+  {id:'orders',title:'Payment Orders',icon:'edit',render:renderOrders}
 ];
 
 function openMenu(){
@@ -843,6 +860,80 @@ function drawProduct(b,key){
     };
     b.appendChild(z);
   }
+}
+
+
+function renderPayments(root){
+  var p=state.cfg.payments||{bKash:'',Rocket:'',Nagad:''};
+  root.innerHTML=
+    '<div class="card"><h2><span class="n">1</span>Payment Numbers</h2>'+
+    '<p class="d">গ্রাহকরা পেমেন্ট করার সময় এই নম্বরগুলো দেখতে পাবেন। যে নম্বর চালু রাখতে চান সেটি লিখুন; ফাঁকা রাখলে সেই মাধ্যমটি সাইটে দেখাবে না।</p>'+
+    '<div class="pay-grid">'+
+    '<div><label class="lb">bKash Number</label><input class="inp" id="payBkash" inputmode="tel" maxlength="20" placeholder="01XXXXXXXXX"></div>'+
+    '<div><label class="lb">Rocket Number</label><input class="inp" id="payRocket" inputmode="tel" maxlength="20" placeholder="01XXXXXXXXX"></div>'+
+    '<div><label class="lb">Nagad Number</label><input class="inp" id="payNagad" inputmode="tel" maxlength="20" placeholder="01XXXXXXXXX"></div>'+
+    '</div><div class="btns" style="margin-top:14px"><button type="button" class="btn" id="paySave">Save Payment Numbers</button></div></div>'+
+    '<div class="note info">শুধু আপনার নিজের/অনুমোদিত মার্চেন্ট বা ব্যক্তিগত পেমেন্ট নম্বর ব্যবহার করুন। এখানে নম্বর সেট করলেই স্বয়ংক্রিয় পেমেন্ট যাচাই হয় না; Transaction ID মিলিয়ে Admin-কে Approve করতে হবে।</div>';
+  $('#payBkash',root).value=p.bKash||'';
+  $('#payRocket',root).value=p.Rocket||'';
+  $('#payNagad',root).value=p.Nagad||'';
+  $('#paySave',root).onclick=async function(){
+    var btn=this;btn.disabled=true;
+    try{
+      state.cfg=await api('/api/admin/payments',{payments:{
+        bKash:$('#payBkash',root).value.trim(),
+        Rocket:$('#payRocket',root).value.trim(),
+        Nagad:$('#payNagad',root).value.trim()
+      }});
+      toast('Payment numbers saved','ok');
+    }catch(e){toast(e.message,'bad')}
+    btn.disabled=false;
+  };
+}
+
+async function renderOrders(root){
+  root.innerHTML='<div class="card"><h2><span class="n">1</span>Payment Orders</h2>'+
+    '<p class="d">গ্রাহকের Transaction ID যাচাই করে তারপর Approve অথবা Reject করুন।</p>'+
+    '<button type="button" class="btn ghost" id="ordersRefresh">Refresh Orders</button>'+
+    '<div id="ordersList" style="margin-top:12px"><div class="soon">Loading orders...</div></div></div>';
+  var list=$('#ordersList',root);
+  async function load(){
+    list.innerHTML='<div class="soon">Loading orders...</div>';
+    try{
+      var items=await api('/api/admin/orders');
+      if(!items.length){list.innerHTML='<div class="soon">এখনো কোনো Payment Order আসেনি।</div>';return;}
+      list.innerHTML='';
+      items.forEach(function(o){
+        var d=new Date(o.date);
+        var date=isNaN(d.getTime())?String(o.date||''):d.toLocaleString('en-GB');
+        var card=document.createElement('article');card.className='order-admin';
+        card.innerHTML='<div class="oa-head"><div class="oa-id">Order #'+esc(o.id)+'</div>'+
+          '<span class="oa-status '+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
+          '<div class="oa-info">'+
+          '<div>Product<b>'+esc(o.product)+'</b></div><div>Package<b>'+esc(o.package)+'</b></div>'+
+          '<div>Amount<b>৳'+Number(o.price||0).toFixed(2)+'</b></div><div>Player ID<b>'+esc(o.playerId)+'</b></div>'+
+          '<div>Payment<b>'+esc(o.method)+'</b></div><div>Transaction ID<b>'+esc(o.trxId)+'</b></div>'+
+          '<div>Order time<b>'+esc(date)+'</b></div></div>';
+        if(o.status==='Pending'){
+          var actions=document.createElement('div');actions.className='oa-actions';
+          var yes=document.createElement('button');yes.type='button';yes.className='btn';yes.textContent='Approve';
+          var no=document.createElement('button');no.type='button';no.className='btn danger';no.textContent='Reject';
+          async function setStatus(status,button){
+            if(!confirm('Order #'+o.id+' - '+status+'?'))return;
+            button.disabled=true;
+            try{await api('/api/admin/order-status',{id:o.id,status:status});toast('Order '+status,'ok');await load();}
+            catch(e){toast(e.message,'bad');button.disabled=false;}
+          }
+          yes.onclick=function(){setStatus('Approved',yes)};
+          no.onclick=function(){setStatus('Rejected',no)};
+          actions.appendChild(yes);actions.appendChild(no);card.appendChild(actions);
+        }
+        list.appendChild(card);
+      });
+    }catch(e){list.innerHTML='<div class="note bad">'+esc(e.message)+'</div>';}
+  }
+  $('#ordersRefresh',root).onclick=load;
+  await load();
 }
 
 (async function(){
