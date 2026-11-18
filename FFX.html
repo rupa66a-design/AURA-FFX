@@ -2091,8 +2091,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var home=document.getElementById('homeView'), ff=document.getElementById('ffView'), foot=document.getElementById('siteFooter');
@@ -2124,7 +2123,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   var buy=document.getElementById('buyBtn'), warn=document.getElementById('loginWarn');
   function upd(){
     document.getElementById('needAmt').textContent=sel.price;
-    if(isLoggedIn){warn.style.display='none';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';buy.textContent='অর্ডার করুন';buy.href='#';}
     else{warn.style.display='flex';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   document.querySelectorAll('#pkGrid .pk').forEach(function(b){
@@ -2156,7 +2155,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');document.getElementById('uid').focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -2166,8 +2165,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var BALANCE=0;          // ইউজারের ওয়ালেট ব্যালেন্স (ব্যাকএন্ড থেকে বসান)
@@ -2186,7 +2184,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('uidNeed').textContent=sel.price;
     document.getElementById('uidBal').textContent=BALANCE.toFixed(2);
-    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('uidBalRow'), rf=document.getElementById('uidRf');
@@ -2241,7 +2239,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');inp.focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -2250,8 +2248,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var BALANCE=0;          // ইউজারের ওয়ালেট ব্যালেন্স (ব্যাকএন্ড থেকে বসান)
@@ -2270,7 +2267,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('wmNeed').textContent=sel.price;
     document.getElementById('wmBal').textContent=BALANCE.toFixed(2);
-    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('wmBalRow'), rf=document.getElementById('wmRf');
@@ -2325,7 +2322,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');inp.focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -2334,8 +2331,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var BALANCE=0;          // ইউজারের ওয়ালেট ব্যালেন্স (ব্যাকএন্ড থেকে বসান)
@@ -2354,7 +2350,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('wlNeed').textContent=sel.price;
     document.getElementById('wlBal').textContent=BALANCE.toFixed(2);
-    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('wlBalRow'), rf=document.getElementById('wlRf');
@@ -2409,7 +2405,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');inp.focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -2418,8 +2414,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var BALANCE=0;          // ইউজারের ওয়ালেট ব্যালেন্স (ব্যাকএন্ড থেকে বসান)
@@ -2438,7 +2433,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('luNeed').textContent=sel.price;
     document.getElementById('luBal').textContent=BALANCE.toFixed(2);
-    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('luBalRow'), rf=document.getElementById('luRf');
@@ -2493,7 +2488,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');inp.focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -2502,8 +2497,7 @@ setInterval(fetchFreshAccountConfig, 15000);
 // ==========================================
 (function(){
   // লগইন সিস্টেম যুক্ত করলে এটা true করে দিন
-  var isLoggedIn=!!window.__ffxLoggedIn;
-  window.addEventListener("ffx-auth-change",function(e){isLoggedIn=!!(e.detail&&e.detail.loggedIn);upd();});
+  var isLoggedIn=false;
   var LOGIN_URL='#';
 
   var BALANCE=0;          // ইউজারের ওয়ালেট ব্যালেন্স (ব্যাকএন্ড থেকে বসান)
@@ -2522,7 +2516,7 @@ setInterval(fetchFreshAccountConfig, 15000);
   function upd(){
     document.getElementById('inNeed').textContent=sel.price;
     document.getElementById('inBal').textContent=BALANCE.toFixed(2);
-    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Payment';buy.href='#';}
+    if(isLoggedIn){warn.style.display='none';balRow.style.display='flex';buy.textContent='Buy Now';buy.href='#';}
     else{warn.style.display='flex';balRow.style.display='none';buy.textContent='Login';buy.href=LOGIN_URL;}
   }
   var balRow=document.getElementById('inBalRow'), rf=document.getElementById('inRf');
@@ -2577,7 +2571,7 @@ setInterval(fetchFreshAccountConfig, 15000);
     if(!sel.name){toast('আগে একটি রিচার্জ প্যাকেজ সিলেক্ট করুন');return;}
     if(uid.length<6){toast('সঠিক প্লেয়ার আইডি দিন');inp.focus();return;}
     // TODO: অর্ডার সাবমিট লজিক এখানে বসান
-    if(sel.pay==='Instant Pay'){ if(window.openProductPayment) window.openProductPayment({product:sel.name,amount:sel.price,playerUid:uid}); else toast('Payment পেজ পাওয়া যায়নি'); } else { toast('Wallet Pay নির্বাচিত হয়েছে। Wallet order ব্যবস্থা সংযুক্ত করতে হবে।'); }
+    toast('অর্ডার সাবমিট হচ্ছে... ('+sel.name+', '+sel.price+' টাকা, '+sel.pay+')');
   });
   upd();
 })();
@@ -3063,6 +3057,8 @@ setInterval(fetchFreshAccountConfig, 15000);
 <style>
 #ffxUserLayer{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(8,18,45,.66);backdrop-filter:blur(5px)}
 #ffxUserLayer.show{display:flex}
+#ffxUserLayer.payment-open{align-items:flex-start;justify-content:center;overflow-y:auto;padding:0;background:#f4f7fc;backdrop-filter:none}
+#ffxUserLayer.payment-open .fu-card{width:100%;max-width:620px;min-height:100vh;max-height:none;overflow:visible;border:0;border-radius:0;padding:22px 16px 40px;box-shadow:none;background:#f8faff}
 #ffxUserLayer .fu-card{width:100%;max-width:430px;max-height:90vh;overflow:auto;background:#fff;border:1px solid #dbe5f5;border-radius:23px;padding:20px;box-shadow:0 22px 70px rgba(15,35,80,.3)}
 #ffxUserLayer .fu-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 #ffxUserLayer .fu-head b{font-size:19px;color:#14264b}
@@ -3106,7 +3102,7 @@ async function api(url,data){
 }
 function toast(m){var t=document.getElementById('toast');if(!t)return;t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('show')},2400)}
 function open(){layer.classList.add('show');layer.setAttribute('aria-hidden','false')}
-function close(){layer.classList.remove('show');layer.setAttribute('aria-hidden','true')}
+function close(){layer.classList.remove('show','payment-open');layer.setAttribute('aria-hidden','true')}
 document.getElementById('fuClose').onclick=close;
 layer.addEventListener('click',function(e){if(e.target===layer)close()});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
@@ -3128,12 +3124,8 @@ async function refreshProfile(){
  if(!getToken()){user=null;updateProfile();return}
  try{var j=await api('/api/auth/me');user=j.user;updateProfile()}catch(e){clearToken();user=null;updateProfile()}
 }
-// Profile refresh button fetches the latest wallet balance from the server.
-window.onRefreshBalance=refreshProfile;
 function updateProfile(){
  var logged=!!user,bal=user?Number(user.balance||0):0;
- window.__ffxLoggedIn=logged;
- window.dispatchEvent(new CustomEvent('ffx-auth-change',{detail:{loggedIn:logged}}));
  if(window.setProfile)window.setProfile({loggedIn:logged,name:user?user.username:'Guest',email:'',balance:bal,orders:0,codes:0});
  var acName=document.getElementById('accName'),acMail=document.getElementById('accMail'),accLo=document.getElementById('accLo');
  if(acName)acName.textContent=logged?'Hi, '+user.username:'Hi, Guest';
@@ -3142,6 +3134,7 @@ function updateProfile(){
 }
 async function logout(){clearToken();user=null;updateProfile();toast('Logout হয়েছে')}
 async function openAddMoney(){
+ layer.classList.add('payment-open');
  if(!user){renderAuth('login','প্রথমে Login করুন');open();return}
  try{settings=await api('/api/payments/settings')}catch(e){}
  title.textContent='Add Money';
@@ -3223,43 +3216,14 @@ async function openAddMoney(){
  }
  showPicker();
 }
-// Product Instant Pay: separate manual request tied to the selected package and Player UID.
-window.openProductPayment=async function(order){
- if(!user){renderAuth('login','প্রথমে Login করুন');open();return}
- if(!order||!order.product||!Number.isInteger(Number(order.amount))||!order.playerUid){toast('প্যাকেজ, Amount ও Player ID দিন');return}
- try{settings=await api('/api/payments/settings')}catch(e){toast(e.message);return}
- var chosen='';
- function picker(){
-  title.textContent='Select Payment Method';
-  body.innerHTML='<p class="fu-muted">'+esc(order.product)+' • Player ID: '+esc(order.playerUid)+' • ৳'+esc(order.amount)+'</p><p>পেমেন্ট মাধ্যম নির্বাচন করুন</p><div class="fu-methods">'+
-   '<button class="fu-method" data-method="bKash" style="padding:18px 5px;color:#d81b60">bKash</button><button class="fu-method" data-method="Nagad" style="padding:18px 5px;color:#e11d2e">Nagad</button><button class="fu-method" data-method="Rocket" style="padding:18px 5px;color:#6b238e">Rocket</button></div><button class="fu-switch" id="prodPayCancel">Cancel</button>';
-  body.querySelectorAll('[data-method]').forEach(function(btn){btn.onclick=function(){chosen=btn.dataset.method;paymentPage()}});
-  document.getElementById('prodPayCancel').onclick=close;
- }
- function paymentPage(){
-  var number=settings[chosen.toLowerCase()]||'', color=chosen==='bKash'?'#c92378':chosen==='Nagad'?'#e51b2b':'#70218b';
-  title.textContent=chosen+' Payment';
-  body.innerHTML='<div style="background:'+color+';color:#fff;border-radius:18px;padding:16px"><h3>'+esc(chosen)+' Send Money</h3><p>প্যাকেজ: <b>'+esc(order.product)+'</b></p><p>Player ID: <b>'+esc(order.playerUid)+'</b></p><p>Amount: <b>৳'+esc(order.amount)+'</b></p><p>পেমেন্ট নম্বর: <b>'+ (number?esc(number):'Admin নম্বর সেট করেনি')+'</b> '+(number?'<button type="button" id="prodCopy">কপি</button>':'')+'</p><p>Send Money করার পর TrxID লিখুন।</p><input class="fu-input" id="prodTrx" maxlength="40" placeholder="Transaction ID"><div class="fu-error" id="prodErr"></div><button class="fu-btn" id="prodVerify">Verify</button><button class="fu-switch" id="prodBack">← মাধ্যম পরিবর্তন</button></div>';
-  var cp=document.getElementById('prodCopy');if(cp)cp.onclick=function(){copyNumber(number)};
-  document.getElementById('prodBack').onclick=picker;
-  document.getElementById('prodVerify').onclick=async function(){
-   var btn=this,trx=document.getElementById('prodTrx').value.trim();
-   if(!number){document.getElementById('prodErr').textContent='Admin পেমেন্ট নম্বর সেট করেনি';return}
-   if(!trx){document.getElementById('prodErr').textContent='Transaction ID লিখুন';return}
-   btn.disabled=true;btn.textContent='জমা হচ্ছে...';
-   try{await api('/api/payments/product-order',{method:chosen,amount:Number(order.amount),trxid:trx,product:order.product,playerUid:order.playerUid});toast('অর্ডার জমা হয়েছে। Admin যাচাই করবে।');close()}
-   catch(e){document.getElementById('prodErr').textContent=e.message;btn.disabled=false;btn.textContent='Verify'}
-  };
- }
- picker();open();
-};
-
 document.getElementById('acAdd').onclick=openAddMoney;
 var nav=document.querySelectorAll('nav.nav a');
 if(nav[2])nav[2].addEventListener('click',function(e){e.preventDefault();openAddMoney()},true);
 var wallet=document.querySelector('.wallet');if(wallet)wallet.addEventListener('click',function(e){e.preventDefault();openAddMoney()});
 document.querySelectorAll('.btn.login').forEach(function(b){b.addEventListener('click',function(e){if(!user){e.preventDefault();renderAuth('login');open()}},true)});
 var accLogout=document.getElementById('acLogout');if(accLogout)accLogout.onclick=function(){if(user)logout();else{renderAuth('login');open()}};
+var accountAddMoney=document.querySelector('.acc-it[data-go="addmoney"]');
+if(accountAddMoney)accountAddMoney.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();var panel=document.getElementById('accPanel');if(panel){panel.classList.remove('show');panel.setAttribute('aria-hidden','true')}openAddMoney()},true);
 var oldAccLo=document.getElementById('accLo');if(oldAccLo)oldAccLo.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();if(user)logout();else{renderAuth('login');open()}},true);
 refreshProfile();
 })();
