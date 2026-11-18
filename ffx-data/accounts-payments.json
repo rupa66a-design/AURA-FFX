@@ -38,5 +38,16 @@
     "nagad": "01779472554",
     "rocket": "01798547978"
   },
-  "diamondStock": 100
+  "diamondStock": 710,
+  "diamondTransactions": [
+    {
+      "id": "ed73275c-1eb4-4b24-a1c8-d5e2a5df8e7c",
+      "action": "add",
+      "amount": 610,
+      "balance": 710,
+      "note": "610",
+      "source": "manual",
+      "createdAt": "2026-11-18T14:52:06.489Z"
+    }
+  ]
 }
