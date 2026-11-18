@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "id": "8433552b-f509-455e-80d1-1a670418e2f9",
+      "username": "rifat",
+      "salt": "331b4ed8905bf0f6d3da4e9e6ac091f4",
+      "passHash": "e0743020efc34a7421208c330c0666ad9bc31e8d2705f5236b708c3b04439e2c53674185826a8d0c5330e5835a06784c0b23f43c8f46cc4fa1d557a105c6681c",
+      "balance": 0,
+      "createdAt": "2026-11-18T02:40:50.998Z"
+    }
+  ],
+  "deposits": [],
+  "settings": {
+    "bkash": "",
+    "nagad": "",
+    "rocket": ""
+  }
+}
