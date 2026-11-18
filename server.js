@@ -502,6 +502,32 @@ function getHomePage(cb) {
         if (f) html = html.split(IMAGES[k].file).join('/uploads/' + f);
       });
       html = applySiteConfig(html);
+      const stockScript = `<script>
+(function(){
+  function applyStock(stock){
+    document.querySelectorAll('.pk[data-name]').forEach(function(btn){
+      var name=btn.getAttribute('data-name')||'';
+      if(!/diamond/i.test(name)) return;
+      var m=name.match(/(\\d[\\d,]*)\\s*diamond/i)||name.match(/diamond\\s*[-x×]?\\s*(\\d[\\d,]*)/i);
+      if(!m) return;
+      var qty=Number(m[1].replace(/,/g,''));
+      if(!Number.isFinite(qty)||qty<1) return;
+      var old=btn.querySelector('.stock-state'); if(old) old.remove();
+      var available=stock>=qty;
+      btn.disabled=!available;
+      btn.setAttribute('aria-disabled',String(!available));
+      if(!available){
+        var tag=document.createElement('small');tag.className='stock-state';
+        tag.textContent='Out of Stock';tag.style.cssText='display:block;color:#dc2626;font-weight:800;margin-top:4px';
+        btn.appendChild(tag);
+      }
+    });
+  }
+  fetch('/api/diamond-stock',{cache:'no-store'}).then(function(r){return r.ok?r.json():null;})
+    .then(function(d){if(d&&Number.isFinite(Number(d.stock)))applyStock(Number(d.stock));}).catch(function(){});
+})();
+</script>`;
+      html = html.replace(/<\/body>/i, stockScript + '</body>');
       const raw = Buffer.from(html, 'utf8');
       zlib.gzip(raw, function (e3, gz) {
         renderCache = { mtime: st.mtimeMs, cfgVersion: cfgVersion, raw: raw, gz: e3 ? null : gz };
@@ -654,9 +680,9 @@ function removeUpload(name) {
 // ===== User accounts, wallet and manual payment store =====
 const ACCOUNT_FILE = path.join(DATA_DIR, 'accounts-payments.json');
 const USER_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
-let accountData = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' } };
+let accountData = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0 };
 async function loadAccountData() {
-  const empty = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' } };
+  const empty = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0 };
   let raw = null;
 
   // GitHub is the persistent source when FFX-G is configured.
@@ -681,7 +707,8 @@ async function loadAccountData() {
     accountData = {
       users: Array.isArray(x.users) ? x.users : [],
       deposits: Array.isArray(x.deposits) ? x.deposits : [],
-      settings: Object.assign({ bkash: '', nagad: '', rocket: '' }, x.settings || {})
+      settings: Object.assign({ bkash: '', nagad: '', rocket: '' }, x.settings || {}),
+      diamondStock: Number.isSafeInteger(Number(x.diamondStock)) && Number(x.diamondStock) >= 0 ? Number(x.diamondStock) : 0
     };
   } else {
     accountData = empty;
@@ -727,12 +754,25 @@ function verifyUserToken(req) {
 function hashPassword(password, salt) {
   return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (e, key) => e ? reject(e) : resolve(key.toString('hex'))));
 }
+function diamondQuantity(product) {
+  const name = String(product || '');
+  if (!/diamond/i.test(name)) return 0;
+  const m = name.match(/(\\d[\\d,]*)\\s*diamond/i) || name.match(/diamond\\s*[-x×]?\\s*(\\d[\\d,]*)/i);
+  if (!m) return 0;
+  const qty = Number(String(m[1]).replace(/,/g, ''));
+  return Number.isSafeInteger(qty) && qty > 0 ? qty : 0;
+}
 function publicDeposit(d) {
   return { id: d.id, method: d.method, amount: d.amount, trxid: d.trxid, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt, purpose: d.purpose || 'wallet', product: d.product || '', playerUid: d.playerUid || '' };
 }
 
 async function handleApi(req, res, pathname) {
   try {
+
+    // Public total diamond stock
+    if (req.method === 'GET' && pathname === '/api/diamond-stock') {
+      return sendJson(res, 200, { stock: Number(accountData.diamondStock || 0) });
+    }
 
     // Public payment numbers
     if (req.method === 'GET' && pathname === '/api/payments/settings') {
@@ -832,6 +872,19 @@ async function handleApi(req, res, pathname) {
     if (!isAuthed(req)) return sendJson(res, 401, { error: 'লগইন করুন' });
 
 
+    if (req.method === 'GET' && pathname === '/api/admin/diamond-stock') {
+      return sendJson(res, 200, { stock: Number(accountData.diamondStock || 0) });
+    }
+    if (req.method === 'POST' && pathname === '/api/admin/diamond-stock') {
+      const b = await readJson(req, 4096);
+      const stock = Number(b.stock);
+      if (!Number.isSafeInteger(stock) || stock < 0 || stock > 1000000000) {
+        return sendJson(res, 400, { error: 'স্টকের সংখ্যা ০ থেকে ১০০ কোটি-এর মধ্যে পূর্ণসংখ্যা হতে হবে' });
+      }
+      accountData.diamondStock = stock;
+      await saveAccountData();
+      return sendJson(res, 200, { stock: accountData.diamondStock });
+    }
     if (req.method === 'GET' && pathname === '/api/admin/payment-settings') {
       return sendJson(res, 200, { settings: accountData.settings });
     }
@@ -855,6 +908,13 @@ async function handleApi(req, res, pathname) {
       if (!d) return sendJson(res, 404, { error: 'Payment request পাওয়া যায়নি' });
       if (d.status !== 'Pending') return sendJson(res, 409, { error: 'এই Payment আগেই প্রসেস করা হয়েছে' });
       if (!['Approved', 'Rejected'].includes(b.status)) return sendJson(res, 400, { error: 'ভুল Status' });
+      if (b.status === 'Approved' && (d.purpose || 'wallet') === 'product') {
+        const qty = diamondQuantity(d.product);
+        if (qty > 0 && Number(accountData.diamondStock || 0) < qty) {
+          return sendJson(res, 409, { error: 'পর্যাপ্ত Diamond Stock নেই। প্রয়োজন: ' + qty + ', বর্তমান স্টক: ' + Number(accountData.diamondStock || 0) });
+        }
+        if (qty > 0) accountData.diamondStock = Number(accountData.diamondStock || 0) - qty;
+      }
       d.status = b.status; d.updatedAt = new Date().toISOString();
       if (b.status === 'Approved' && (d.purpose || 'wallet') !== 'product') {
         const u = accountData.users.find(x => x.id === d.userId);
