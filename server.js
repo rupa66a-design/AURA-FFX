@@ -680,9 +680,9 @@ function removeUpload(name) {
 // ===== User accounts, wallet and manual payment store =====
 const ACCOUNT_FILE = path.join(DATA_DIR, 'accounts-payments.json');
 const USER_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
-let accountData = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0 };
+let accountData = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0, diamondTransactions: [] };
 async function loadAccountData() {
-  const empty = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0 };
+  const empty = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' }, diamondStock: 0, diamondTransactions: [] };
   let raw = null;
 
   // GitHub is the persistent source when FFX-G is configured.
@@ -708,7 +708,8 @@ async function loadAccountData() {
       users: Array.isArray(x.users) ? x.users : [],
       deposits: Array.isArray(x.deposits) ? x.deposits : [],
       settings: Object.assign({ bkash: '', nagad: '', rocket: '' }, x.settings || {}),
-      diamondStock: Number.isSafeInteger(Number(x.diamondStock)) && Number(x.diamondStock) >= 0 ? Number(x.diamondStock) : 0
+      diamondStock: Number.isSafeInteger(Number(x.diamondStock)) && Number(x.diamondStock) >= 0 ? Number(x.diamondStock) : 0,
+      diamondTransactions: Array.isArray(x.diamondTransactions) ? x.diamondTransactions.slice(0, 500).filter(t => t && typeof t === 'object') : []
     };
   } else {
     accountData = empty;
@@ -875,6 +876,31 @@ async function handleApi(req, res, pathname) {
     if (req.method === 'GET' && pathname === '/api/admin/diamond-stock') {
       return sendJson(res, 200, { stock: Number(accountData.diamondStock || 0) });
     }
+    if (req.method === 'GET' && pathname === '/api/admin/diamond-stock/transactions') {
+      return sendJson(res, 200, { transactions: (accountData.diamondTransactions || []).slice(0, 100) });
+    }
+    if (req.method === 'POST' && pathname === '/api/admin/diamond-stock/adjust') {
+      const b = await readJson(req, 4096);
+      const amount = Number(b.amount);
+      const action = String(b.action || '');
+      const note = String(b.note || '').trim().slice(0, 120);
+      if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000) {
+        return sendJson(res, 400, { error: 'ডায়মন্ডের পরিমাণ ১ থেকে ১০০ কোটি-এর মধ্যে পূর্ণসংখ্যা হতে হবে' });
+      }
+      if (!['add', 'deduct'].includes(action)) return sendJson(res, 400, { error: 'ভুল Action' });
+      const current = Number(accountData.diamondStock || 0);
+      if (action === 'deduct' && current < amount) {
+        return sendJson(res, 409, { error: 'Wallet-এ পর্যাপ্ত Diamond নেই। বর্তমান: ' + current });
+      }
+      const next = action === 'add' ? current + amount : current - amount;
+      if (!Number.isSafeInteger(next) || next > 1000000000) return sendJson(res, 400, { error: 'Wallet সীমা অতিক্রম করবে' });
+      accountData.diamondStock = next;
+      accountData.diamondTransactions = Array.isArray(accountData.diamondTransactions) ? accountData.diamondTransactions : [];
+      accountData.diamondTransactions.unshift({ id: crypto.randomUUID(), action, amount, balance: next, note, source: 'manual', createdAt: new Date().toISOString() });
+      accountData.diamondTransactions = accountData.diamondTransactions.slice(0, 500);
+      await saveAccountData();
+      return sendJson(res, 200, { stock: accountData.diamondStock, transactions: accountData.diamondTransactions.slice(0, 100) });
+    }
     if (req.method === 'POST' && pathname === '/api/admin/diamond-stock') {
       const b = await readJson(req, 4096);
       const stock = Number(b.stock);
@@ -882,6 +908,9 @@ async function handleApi(req, res, pathname) {
         return sendJson(res, 400, { error: 'স্টকের সংখ্যা ০ থেকে ১০০ কোটি-এর মধ্যে পূর্ণসংখ্যা হতে হবে' });
       }
       accountData.diamondStock = stock;
+      accountData.diamondTransactions = Array.isArray(accountData.diamondTransactions) ? accountData.diamondTransactions : [];
+      accountData.diamondTransactions.unshift({ id: crypto.randomUUID(), action: 'set', amount: stock, balance: stock, note: 'Admin set total balance', source: 'manual', createdAt: new Date().toISOString() });
+      accountData.diamondTransactions = accountData.diamondTransactions.slice(0, 500);
       await saveAccountData();
       return sendJson(res, 200, { stock: accountData.diamondStock });
     }
@@ -913,7 +942,12 @@ async function handleApi(req, res, pathname) {
         if (qty > 0 && Number(accountData.diamondStock || 0) < qty) {
           return sendJson(res, 409, { error: 'পর্যাপ্ত Diamond Stock নেই। প্রয়োজন: ' + qty + ', বর্তমান স্টক: ' + Number(accountData.diamondStock || 0) });
         }
-        if (qty > 0) accountData.diamondStock = Number(accountData.diamondStock || 0) - qty;
+        if (qty > 0) {
+          accountData.diamondStock = Number(accountData.diamondStock || 0) - qty;
+          accountData.diamondTransactions = Array.isArray(accountData.diamondTransactions) ? accountData.diamondTransactions : [];
+          accountData.diamondTransactions.unshift({ id: crypto.randomUUID(), action: 'deduct', amount: qty, balance: accountData.diamondStock, note: 'Approved order: ' + String(d.product || '').slice(0, 80), source: 'order', orderId: d.id, createdAt: new Date().toISOString() });
+          accountData.diamondTransactions = accountData.diamondTransactions.slice(0, 500);
+        }
       }
       d.status = b.status; d.updatedAt = new Date().toISOString();
       if (b.status === 'Approved' && (d.purpose || 'wallet') !== 'product') {

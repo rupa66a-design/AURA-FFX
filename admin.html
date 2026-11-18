@@ -383,28 +383,48 @@ async function enter(){
 }
 
 async function renderDiamondStock(root){
-  root.innerHTML='<div class="card"><h2><span class="n">1</span>মোট Diamond Stock</h2>'+
-    '<p class="d">এখানে সব Diamond প্যাকেজের জন্য একটি মোট স্টক থাকবে। Admin Approve করলে অর্ডারের Diamond পরিমাণ স্টক থেকে কমবে। Pending বা Rejected অর্ডারে স্টক কমবে না।</p>'+
-    '<div style="font-size:13px;color:var(--mu);font-weight:700;margin:8px 0 5px">বর্তমান মোট স্টক</div>'+
-    '<div id="diamondCurrent" style="font-size:32px;font-weight:800;color:var(--v);margin-bottom:14px">Loading...</div>'+
-    '<label class="lb" for="diamondStockInput">নতুন মোট Diamond Stock</label>'+
-    '<input class="inp" id="diamondStockInput" type="number" min="0" max="1000000000" step="1" inputmode="numeric" placeholder="যেমন: 5000">'+
-    '<div class="btns" style="margin-top:14px"><button type="button" class="btn" id="diamondStockSave">Save Stock</button><button type="button" class="btn ghost" id="diamondStockRefresh">Refresh</button></div></div>'+
-    '<div class="note info">উদাহরণ: মোট স্টক ৫০০০ থাকলে ১০০ ডায়মন্ডের অনুমোদিত অর্ডারে স্টক হবে ৪৯০০। পর্যাপ্ত স্টক না থাকলে অর্ডার Approve হবে না।</div>';
-  var current=$('#diamondCurrent',root),input=$('#diamondStockInput',root),save=$('#diamondStockSave',root);
+  root.innerHTML='<div class="card"><h2><span class="n">1</span>Diamond Wallet</h2>'+
+    '<p class="d">Supplier থেকে কেনা ডায়মন্ড এখানে যোগ করুন। কাস্টমারের অর্ডার Approve করলে বিক্রির ডায়মন্ড স্বয়ংক্রিয়ভাবে Wallet থেকে কমবে।</p>'+
+    '<div style="font-size:13px;color:var(--mu);font-weight:700;margin:8px 0 5px">বর্তমান Wallet Balance</div>'+
+    '<div id="diamondCurrent" style="font-size:32px;font-weight:800;color:var(--v);margin-bottom:18px">Loading...</div>'+
+    '<label class="lb" for="diamondAmountInput">ডায়মন্ডের পরিমাণ</label>'+
+    '<input class="inp" id="diamondAmountInput" type="number" min="1" max="1000000000" step="1" inputmode="numeric" placeholder="যেমন: 5000">'+
+    '<label class="lb" for="diamondNoteInput" style="margin-top:10px">নোট (ঐচ্ছিক)</label>'+
+    '<input class="inp" id="diamondNoteInput" maxlength="120" placeholder="যেমন: Supplier থেকে কেনা">'+
+    '<div class="btns" style="margin-top:14px"><button type="button" class="btn" id="diamondAddBtn">+ Add Diamond</button><button type="button" class="btn ghost" id="diamondDeductBtn">− Deduct Diamond</button><button type="button" class="btn ghost" id="diamondStockRefresh">Refresh</button></div></div>'+
+    '<div class="card" style="margin-top:14px"><h3>Wallet History</h3><div id="diamondHistory"><div class="soon">Loading history...</div></div></div>'+
+    '<div class="note info">Add করলে কেনা ডায়মন্ড যোগ হবে। Deduct করলে হাতে থাকা ডায়মন্ড কমবে। অর্ডার Approve করলেও বিক্রির পরিমাণ স্বয়ংক্রিয়ভাবে কমবে।</div>';
+  var current=$('#diamondCurrent',root),input=$('#diamondAmountInput',root),note=$('#diamondNoteInput',root);
+  var history=$('#diamondHistory',root),add=$('#diamondAddBtn',root),deduct=$('#diamondDeductBtn',root);
   async function load(){
     current.textContent='Loading...';
-    try{var d=await api('/api/admin/diamond-stock');current.textContent=Number(d.stock||0).toLocaleString('en-US')+' 💎';input.value=Number(d.stock||0);}
-    catch(e){current.textContent='Load failed';toast(e.message,'bad');}
+    try{
+      var d=await api('/api/admin/diamond-stock');
+      current.textContent=Number(d.stock||0).toLocaleString('en-US')+' 💎';
+      var h=await api('/api/admin/diamond-stock/transactions');
+      var rows=Array.isArray(h.transactions)?h.transactions:[];
+      if(!rows.length){history.innerHTML='<div class="soon">এখনো কোনো Wallet History নেই</div>';return;}
+      history.innerHTML=rows.map(function(t){
+        var plus=t.action==='add',set=t.action==='set';
+        var label=plus?'Added':set?'Balance Set':t.source==='order'?'Order Approved':'Deducted';
+        var sign=plus?'+':set?'=':'−';
+        var color=plus?'#16a34a':set?'var(--v)':'#dc2626';
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)"><div style="min-width:0"><b>'+label+'</b><div style="font-size:12px;color:var(--mu);overflow-wrap:anywhere">'+esc(t.note||'—')+' · '+(t.createdAt?new Date(t.createdAt).toLocaleString():'')+'</div><div style="font-size:11px;color:var(--mu)">Balance: '+Number(t.balance||0).toLocaleString('en-US')+'</div></div><b style="white-space:nowrap;color:'+color+'">'+sign+Number(t.amount||0).toLocaleString('en-US')+' 💎</b></div>';
+      }).join('');
+    }catch(e){current.textContent='Load failed';history.textContent=e.message;toast(e.message,'bad');}
   }
-  save.onclick=async function(){
+  async function adjust(action,button){
     var n=Number(input.value);
-    if(!Number.isSafeInteger(n)||n<0||n>1000000000){toast('সঠিক পূর্ণসংখ্যা দিন','bad');return;}
-    save.disabled=true;
-    try{var d=await api('/api/admin/diamond-stock',{stock:n});current.textContent=Number(d.stock).toLocaleString('en-US')+' 💎';toast('Diamond stock saved','ok');}
-    catch(e){toast(e.message,'bad');}
-    save.disabled=false;
-  };
+    if(!Number.isSafeInteger(n)||n<=0||n>1000000000){toast('সঠিক পূর্ণসংখ্যা দিন','bad');return;}
+    button.disabled=true;
+    try{
+      await api('/api/admin/diamond-stock/adjust',{action:action,amount:n,note:note.value.trim()});
+      input.value='';note.value='';toast(action==='add'?'Diamond added to wallet':'Diamond deducted from wallet','ok');await load();
+    }catch(e){toast(e.message,'bad');}
+    button.disabled=false;
+  }
+  add.onclick=function(){adjust('add',add)};
+  deduct.onclick=function(){adjust('deduct',deduct)};
   $('#diamondStockRefresh',root).onclick=load;
   await load();
 }
