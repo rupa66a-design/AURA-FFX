@@ -3053,5 +3053,176 @@ setInterval(fetchFreshAccountConfig, 15000);
   sync();
 })();
 </script>
+
+<style>
+#ffxUserLayer{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(8,18,45,.66);backdrop-filter:blur(5px)}
+#ffxUserLayer.show{display:flex}
+#ffxUserLayer .fu-card{width:100%;max-width:430px;max-height:90vh;overflow:auto;background:#fff;border:1px solid #dbe5f5;border-radius:23px;padding:20px;box-shadow:0 22px 70px rgba(15,35,80,.3)}
+#ffxUserLayer .fu-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+#ffxUserLayer .fu-head b{font-size:19px;color:#14264b}
+#ffxUserLayer .fu-x{border:0;border-radius:50%;width:34px;height:34px;background:#eff4ff;color:#315a9c;font-size:22px}
+#ffxUserLayer .fu-input{width:100%;height:48px;border:1.5px solid #dbe4f1;border-radius:13px;padding:0 13px;margin:6px 0 10px;font:inherit;outline:none}
+#ffxUserLayer .fu-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px #2563eb20}
+#ffxUserLayer .fu-btn{width:100%;height:48px;border:0;border-radius:13px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:white;font-weight:800;font-size:15px;margin-top:8px}
+#ffxUserLayer .fu-muted{font-size:13px;color:#64748b;line-height:1.55}
+#ffxUserLayer .fu-switch{border:0;background:none;color:#2563eb;font-weight:800;padding:12px 4px}
+#ffxUserLayer .fu-methods{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+#ffxUserLayer .fu-method{border:1.5px solid #dbe4f1;background:#fff;border-radius:13px;padding:12px 4px;font-weight:800}
+#ffxUserLayer .fu-method.on{border-color:#2563eb;background:#eff6ff}
+#ffxUserLayer .fu-note{background:#eff6ff;border-radius:12px;padding:12px;margin:10px 0;color:#1e40af;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+#ffxUserLayer .fu-history{border:1px solid #e2e8f0;border-radius:12px;padding:10px;margin:8px 0;font-size:13px;line-height:1.6}
+#ffxUserLayer .fu-error{color:#dc2626;font-size:13px;min-height:18px;margin:4px 0}
+#ffxUserLayer #fuSubmit{cursor:pointer}
+#ffxUserLayer .fu-method{min-height:58px;font-size:16px}
+#ffxUserLayer .fu-history{background:#fff}
+</style>
+<div id="ffxUserLayer" aria-hidden="true">
+ <div class="fu-card" role="dialog" aria-modal="true" aria-labelledby="fuTitle">
+  <div class="fu-head"><b id="fuTitle">Login</b><button class="fu-x" type="button" id="fuClose">&times;</button></div>
+  <div id="fuBody"></div>
+ </div>
+</div>
+<script>
+(function(){
+'use strict';
+var layer=document.getElementById('ffxUserLayer'),body=document.getElementById('fuBody'),title=document.getElementById('fuTitle');
+var TOKEN='ffx_user_token',user=null,method='bKash',settings={bkash:'',nagad:'',rocket:''};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function getToken(){try{return localStorage.getItem(TOKEN)||''}catch(e){return ''}}
+function setToken(t){try{localStorage.setItem(TOKEN,t)}catch(e){}}
+function clearToken(){try{localStorage.removeItem(TOKEN)}catch(e){}}
+async function api(url,data){
+ var opt={method:data===undefined?'GET':'POST',headers:{}},t=getToken();
+ if(t)opt.headers.Authorization='Bearer '+t;
+ if(data!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(data)}
+ var r=await fetch(url,opt),j={};try{j=await r.json()}catch(e){}
+ if(!r.ok)throw new Error(j.error||'Request failed');return j;
+}
+function toast(m){var t=document.getElementById('toast');if(!t)return;t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('show')},2400)}
+function open(){layer.classList.add('show');layer.setAttribute('aria-hidden','false')}
+function close(){layer.classList.remove('show');layer.setAttribute('aria-hidden','true')}
+document.getElementById('fuClose').onclick=close;
+layer.addEventListener('click',function(e){if(e.target===layer)close()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+function renderAuth(mode,error){
+ var reg=mode==='register';title.textContent=reg?'Create Account':'Login';
+ body.innerHTML='<p class="fu-muted">'+(reg?'নতুন অ্যাকাউন্ট তৈরি করুন':'আপনার অ্যাকাউন্টে লগইন করুন')+'</p>'+
+ '<label>Username</label><input class="fu-input" id="fuUser" maxlength="24" autocomplete="username" placeholder="Username">'+
+ '<label>Password</label><input class="fu-input" id="fuPass" type="password" maxlength="128" autocomplete="'+(reg?'new-password':'current-password')+'" placeholder="'+(reg?'কমপক্ষে ৮ অক্ষর':'Password')+'">'+
+ '<div class="fu-error" id="fuErr">'+esc(error||'')+'</div><button class="fu-btn" id="fuSubmit">'+(reg?'Create Account':'Login')+'</button>'+
+ '<button class="fu-switch" id="fuSwitch">'+(reg?'আগে অ্যাকাউন্ট আছে? Login':'নতুন অ্যাকাউন্ট খুলুন')+'</button>';
+ document.getElementById('fuSwitch').onclick=function(){renderAuth(reg?'login':'register','')};
+ document.getElementById('fuSubmit').onclick=async function(){
+  var b=this;b.disabled=true;b.textContent='Please wait...';
+  try{var j=await api('/api/auth/'+(reg?'register':'login'),{username:document.getElementById('fuUser').value,password:document.getElementById('fuPass').value});setToken(j.token);user=j.user;await refreshProfile();close();toast(reg?'Account তৈরি হয়েছে':'Login সফল হয়েছে')}
+  catch(e){document.getElementById('fuErr').textContent=e.message;b.disabled=false;b.textContent=reg?'Create Account':'Login'}
+ };
+}
+async function refreshProfile(){
+ if(!getToken()){user=null;updateProfile();return}
+ try{var j=await api('/api/auth/me');user=j.user;updateProfile()}catch(e){clearToken();user=null;updateProfile()}
+}
+function updateProfile(){
+ var logged=!!user,bal=user?Number(user.balance||0):0;
+ if(window.setProfile)window.setProfile({loggedIn:logged,name:user?user.username:'Guest',email:'',balance:bal,orders:0,codes:0});
+ var acName=document.getElementById('accName'),acMail=document.getElementById('accMail'),accLo=document.getElementById('accLo');
+ if(acName)acName.textContent=logged?'Hi, '+user.username:'Hi, Guest';
+ if(acMail)acMail.textContent=logged?'':'লগইন করে অর্ডার করুন';
+ if(accLo){accLo.querySelector('span').textContent=logged?'Logout':'Login';accLo.onclick=function(){if(logged)logout();else{renderAuth('login');open()}}}
+}
+async function logout(){clearToken();user=null;updateProfile();toast('Logout হয়েছে')}
+async function openAddMoney(){
+ if(!user){renderAuth('login','প্রথমে Login করুন');open();return}
+ try{settings=await api('/api/payments/settings')}catch(e){}
+ title.textContent='Add Money';
+ var selectedAmount=100;
+ function showPicker(){
+  title.textContent='Add Money';
+  body.innerHTML='<p class="fu-muted">ওয়ালেটে টাকা যোগ করতে পেমেন্ট মাধ্যম নির্বাচন করুন</p>'+
+   '<label>টাকার পরিমাণ (৳)</label><input class="fu-input" id="fuAmount" type="number" min="10" max="100000" value="'+selectedAmount+'" placeholder="যেমন 500">'+
+   '<div class="fu-methods">'+
+   '<button class="fu-method" data-method="bKash" style="padding:18px 5px;color:#d81b60">bKash</button>'+
+   '<button class="fu-method" data-method="Nagad" style="padding:18px 5px;color:#e11d2e">Nagad</button>'+
+   '<button class="fu-method" data-method="Rocket" style="padding:18px 5px;color:#6b238e">Rocket</button></div>'+
+   '<p class="fu-muted">মাধ্যম নির্বাচন করলে পেমেন্টের নম্বর ও নির্দেশনা দেখানো হবে।</p>'+
+   '<div style="margin-top:18px"><b>Payment History</b><div id="fuHistory" class="fu-muted">লোড হচ্ছে...</div></div>';
+  body.querySelectorAll('[data-method]').forEach(function(btn){btn.onclick=function(){
+   var a=Number(document.getElementById('fuAmount').value);
+   if(!Number.isInteger(a)||a<10||a>100000){alert('১০ থেকে ১,০০,০০০ টাকার মধ্যে Amount দিন');return}
+   selectedAmount=a;method=btn.dataset.method;showPaymentPage();
+  }});
+  loadHistory();
+ }
+ function loadHistory(){
+  api('/api/payments/mine').then(function(h){
+   var box=document.getElementById('fuHistory');if(!box)return;
+   box.innerHTML=h.deposits.length?h.deposits.map(function(d){return '<div class="fu-history"><b>'+esc(d.method)+' • ৳'+esc(d.amount)+'</b><br>TrxID: '+esc(d.trxid)+'<br>Status: <b>'+esc(d.status)+'</b><br><small>'+esc(new Date(d.createdAt).toLocaleString())+'</small></div>'}).join(''):'এখনো কোনো Payment নেই';
+  }).catch(function(e){var box=document.getElementById('fuHistory');if(box)box.textContent=e.message});
+ }
+ function copyNumber(number){
+  if(!number){toast('Admin এখনো পেমেন্ট নম্বর সেট করেনি');return}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(number).then(function(){toast('নম্বর কপি হয়েছে')}).catch(function(){fallbackCopy(number)})}
+  else fallbackCopy(number);
+ }
+ function fallbackCopy(value){
+  var t=document.createElement('textarea');t.value=value;document.body.appendChild(t);t.select();
+  try{document.execCommand('copy');toast('নম্বর কপি হয়েছে')}catch(e){toast('নম্বরটি কপি করা যায়নি')}
+  t.remove();
+ }
+ function showPaymentPage(){
+  var key=method.toLowerCase(),number=settings[key]||'';
+  var isBkash=method==='bKash',isNagad=method==='Nagad';
+  var color=isBkash?'#c92378':(isNagad?'#e51b2b':'#70218b');
+  var soft=isBkash?'#fff0f6':(isNagad?'#fff0f0':'#f7efff');
+  var logo=isBkash?'bKash':(isNagad?'NAGAD':'ROCKET');
+  var ussd=isBkash?'*247#':(isNagad?'*167#':'*322#');
+  var sendLabel='Send Money';
+  var instruction=isBkash?'bKash মোবাইল মেনু অথবা bKash অ্যাপে যান।':(isNagad?'NAGAD মোবাইল মেনু অথবা NAGAD অ্যাপে যান।':'Rocket মোবাইল মেনু অথবা DBBL Rocket অ্যাপে যান।');
+  body.innerHTML='<div style="background:'+color+';color:#fff;border-radius:18px;padding:16px;margin:0 0 14px">'+
+   '<div style="background:#fff;color:'+color+';border-radius:16px;padding:18px 12px;text-align:center;font-weight:900;font-size:25px;box-shadow:0 3px 12px rgba(0,0,0,.12)">'+
+   '<div style="font-size:30px;letter-spacing:1px">'+esc(logo)+'</div><div style="font-size:13px;color:#555;font-weight:800;margin-top:7px">'+sendLabel+' নির্বাচন করুন</div></div>'+
+   '<h3 style="text-align:center;margin:20px 0 12px;font-size:19px">ট্রানজেকশন আইডি দিন</h3>'+
+   '<input class="fu-input" id="fuTrx" maxlength="40" placeholder="ট্রানজেকশন আইডি দিন" style="height:54px;background:#fff;border:2px solid #f3b7cf">'+
+   '<div style="margin-top:16px;line-height:1.8;font-size:14px">'+
+   '<p>• <b>'+ussd+'</b> ডায়াল করুন অথবা '+instruction+'</p>'+
+   '<p>• '+sendLabel+' অপশন নির্বাচন করুন।</p>'+
+   '<p>• এই নম্বরে টাকা পাঠান: <b style="color:#ffe08a;font-size:17px">'+(number?esc(number):'Admin নম্বর সেট করেনি')+'</b> '+
+   (number?'<button type="button" id="fuCopy" style="border:0;border-radius:8px;padding:7px 10px;background:#8d174f;color:white;font-weight:800">▣ কপি</button>':'')+'</p>'+
+   '<p>• টাকার পরিমাণ: <b style="color:#ffe08a;font-size:18px">৳ '+selectedAmount+'</b></p>'+
+   '<p>• পেমেন্ট সম্পন্ন হলে Transaction ID কপি করে উপরের ঘরে লিখুন।</p>'+
+   '<p>• তারপর Verify চাপুন। Admin যাচাই করে Payment Approve করবে।</p>'+
+   '</div></div>'+
+   '<div class="fu-error" id="fuErr"></div>'+
+   '<button class="fu-btn" id="fuSubmit" style="background:#b0002b">Verify</button>'+
+   '<button class="fu-switch" id="fuBack">← পেমেন্ট মাধ্যম পরিবর্তন</button>'+
+   '<div style="margin-top:8px"><b>Payment History</b><div id="fuHistory" class="fu-muted">লোড হচ্ছে...</div></div>';
+  var copy=document.getElementById('fuCopy');if(copy)copy.onclick=function(){copyNumber(number)};
+  document.getElementById('fuBack').onclick=showPicker;
+  document.getElementById('fuSubmit').onclick=async function(){
+   var b=this, trx=document.getElementById('fuTrx').value.trim();
+   if(!number){document.getElementById('fuErr').textContent='এই মাধ্যমের পেমেন্ট নম্বর Admin Panel থেকে সেট করতে হবে।';return}
+   if(!trx){document.getElementById('fuErr').textContent='Transaction ID লিখুন।';return}
+   b.disabled=true;b.textContent='যাচাইয়ের জন্য জমা হচ্ছে...';
+   try{
+    await api('/api/payments/deposit',{method:method,amount:selectedAmount,trxid:trx});
+    toast('Payment request জমা হয়েছে। Admin যাচাই করবে।');
+    showPicker();
+   }catch(e){document.getElementById('fuErr').textContent=e.message;b.disabled=false;b.textContent='Verify'}
+  };
+  loadHistory();
+ }
+ showPicker();
+}
+document.getElementById('acAdd').onclick=openAddMoney;
+var nav=document.querySelectorAll('nav.nav a');
+if(nav[2])nav[2].addEventListener('click',function(e){e.preventDefault();openAddMoney()},true);
+var wallet=document.querySelector('.wallet');if(wallet)wallet.addEventListener('click',function(e){e.preventDefault();openAddMoney()});
+document.querySelectorAll('.btn.login').forEach(function(b){b.addEventListener('click',function(e){if(!user){e.preventDefault();renderAuth('login');open()}},true)});
+var accLogout=document.getElementById('acLogout');if(accLogout)accLogout.onclick=function(){if(user)logout();else{renderAuth('login');open()}};
+var oldAccLo=document.getElementById('accLo');if(oldAccLo)oldAccLo.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();if(user)logout();else{renderAuth('login');open()}},true);
+refreshProfile();
+})();
+</script>
+
 </body>
 </html>
