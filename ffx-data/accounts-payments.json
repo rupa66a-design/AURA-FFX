@@ -7,6 +7,14 @@
       "passHash": "e0743020efc34a7421208c330c0666ad9bc31e8d2705f5236b708c3b04439e2c53674185826a8d0c5330e5835a06784c0b23f43c8f46cc4fa1d557a105c6681c",
       "balance": 0,
       "createdAt": "2026-11-18T02:40:50.998Z"
+    },
+    {
+      "id": "eb8886e4-1ee8-47f1-8cdc-42ea2770711b",
+      "username": "xmbr",
+      "salt": "8ad9d8767b231e8cc898b5806cc7a5ea",
+      "passHash": "e6860fb1cdd7177dffef2d9ebe4a0c9e13ba7dd7edaeb79bff9821f8b01a2381b76e2c5bb44661076db5f05f432fae9fe7ba697851d721b9a28230b2b1b2718d",
+      "balance": 0,
+      "createdAt": "2026-11-18T10:06:18.058Z"
     }
   ],
   "deposits": [
