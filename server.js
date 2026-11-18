@@ -623,6 +623,12 @@ function currentView() {
     texts: TEXTS.map(function (t) {
       return { id: t.id, label: t.label, def: t.def, value: T[t.id] || t.def, custom: !!T[t.id], multi: !!t.multi, url: !!t.url, max: t.max };
     }),
+    // Payment settings are included so the existing Admin UI can display them.
+    payments: {
+      bKash: accountData.settings.bkash || '',
+      Nagad: accountData.settings.nagad || '',
+      Rocket: accountData.settings.rocket || ''
+    },
     banners: bannerList().map(function (e) { return { id: e, src: bannerSrc(e), isDefault: !isUploaded(e) }; }),
     bannersCustom: !!config.banners,
     quick: config.quick || DEFAULT_QUICK,
@@ -644,8 +650,148 @@ function removeUpload(name) {
   if (name && SAFE_FILE.test(name)) fs.unlink(path.join(UPLOAD_DIR, name), function () {});
 }
 
+
+// ===== User accounts, wallet and manual payment store =====
+const ACCOUNT_FILE = path.join(DATA_DIR, 'accounts-payments.json');
+const USER_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+let accountData = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' } };
+async function loadAccountData() {
+  const empty = { users: [], deposits: [], settings: { bkash: '', nagad: '', rocket: '' } };
+  let raw = null;
+
+  // GitHub is the persistent source when FFX-G is configured.
+  if (USE_GH && storage.ok) {
+    const remote = await gh(
+      'GET',
+      contentsUrl(GH_DIR + '/accounts-payments.json') + '?ref=' + encodeURIComponent(GH_BRANCH),
+      null,
+      'application/vnd.github.raw+json'
+    );
+    if (remote.ok) raw = Buffer.from(await remote.arrayBuffer());
+    else if (remote.status !== 404) throw ghErr(remote.status);
+    // 404 is expected the first time this feature is deployed.
+  }
+
+  if (!raw) {
+    try { raw = fs.readFileSync(ACCOUNT_FILE); } catch (_) {}
+  }
+
+  if (raw) {
+    const x = JSON.parse(raw.toString('utf8'));
+    accountData = {
+      users: Array.isArray(x.users) ? x.users : [],
+      deposits: Array.isArray(x.deposits) ? x.deposits : [],
+      settings: Object.assign({ bkash: '', nagad: '', rocket: '' }, x.settings || {})
+    };
+  } else {
+    accountData = empty;
+  }
+}
+
+async function saveAccountData() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const data = Buffer.from(JSON.stringify(accountData, null, 2));
+  const tmp = ACCOUNT_FILE + '.tmp';
+  fs.writeFileSync(tmp, data, { mode: 0o600 });
+  fs.renameSync(tmp, ACCOUNT_FILE);
+
+  if (USE_GH) {
+    if (!storage.ok) throw new Error('GitHub Storage এখনো প্রস্তুত নয়; কিছুক্ষণ পর আবার চেষ্টা করুন');
+    await enqueue(function () {
+      return ghPut(GH_DIR + '/accounts-payments.json', data, 'Update accounts and manual payments');
+    });
+  }
+}
+function cleanUser(u) {
+  return { id: u.id, username: u.username, createdAt: u.createdAt, balance: Number(u.balance || 0) };
+}
+function userToken(userId) {
+  const exp = Date.now() + USER_SESSION_MS;
+  const payload = userId + '.' + exp;
+  const sig = crypto.createHmac('sha256', SECRET).update('user:' + payload).digest('hex');
+  return { token: Buffer.from(payload).toString('base64url') + '.' + sig, expires: exp };
+}
+function verifyUserToken(req) {
+  const h = req.headers.authorization || '';
+  const tok = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  const p = tok.split('.');
+  if (p.length !== 2) return null;
+  let payload;
+  try { payload = Buffer.from(p[0], 'base64url').toString('utf8'); } catch (_) { return null; }
+  const bits = payload.split('.');
+  if (bits.length !== 2 || !/^\d+$/.test(bits[1]) || Number(bits[1]) < Date.now()) return null;
+  const expected = crypto.createHmac('sha256', SECRET).update('user:' + payload).digest('hex');
+  if (!safeEq(p[1], expected)) return null;
+  return accountData.users.find(u => u.id === bits[0]) || null;
+}
+function hashPassword(password, salt) {
+  return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (e, key) => e ? reject(e) : resolve(key.toString('hex'))));
+}
+function publicDeposit(d) {
+  return { id: d.id, method: d.method, amount: d.amount, trxid: d.trxid, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt };
+}
+
 async function handleApi(req, res, pathname) {
   try {
+
+    // Public payment numbers
+    if (req.method === 'GET' && pathname === '/api/payments/settings') {
+      return sendJson(res, 200, accountData.settings);
+    }
+
+    // User registration and login
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const b = await readJson(req, 4096);
+      const username = String(b.username || '').trim();
+      const password = String(b.password || '');
+      if (!/^[A-Za-z0-9_]{3,24}$/.test(username)) return sendJson(res, 400, { error: 'Username 3-24 অক্ষর; শুধু ইংরেজি, সংখ্যা ও _ ব্যবহার করুন' });
+      if (password.length < 8 || password.length > 128) return sendJson(res, 400, { error: 'Password কমপক্ষে ৮ অক্ষরের হতে হবে' });
+      if (accountData.users.some(u => u.username.toLowerCase() === username.toLowerCase())) return sendJson(res, 409, { error: 'এই Username আগে থেকেই আছে' });
+      const salt = crypto.randomBytes(16).toString('hex');
+      const passHash = await hashPassword(password, salt);
+      const user = { id: crypto.randomUUID(), username, salt, passHash, balance: 0, createdAt: new Date().toISOString() };
+      accountData.users.push(user); await saveAccountData();
+      const t = userToken(user.id);
+      return sendJson(res, 201, { token: t.token, expires: t.expires, user: cleanUser(user) });
+    }
+    if (req.method === 'POST' && pathname === '/api/auth/login') {
+      const b = await readJson(req, 4096);
+      const username = String(b.username || '').trim();
+      const password = String(b.password || '');
+      const user = accountData.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user || !safeEq(await hashPassword(password, user.salt), user.passHash)) {
+        return sendJson(res, 401, { error: 'Username অথবা Password ভুল' });
+      }
+      const t = userToken(user.id);
+      return sendJson(res, 200, { token: t.token, expires: t.expires, user: cleanUser(user) });
+    }
+    if (req.method === 'GET' && pathname === '/api/auth/me') {
+      const u = verifyUserToken(req);
+      if (!u) return sendJson(res, 401, { error: 'আবার লগইন করুন' });
+      return sendJson(res, 200, { user: cleanUser(u) });
+    }
+    if (req.method === 'GET' && pathname === '/api/payments/mine') {
+      const u = verifyUserToken(req);
+      if (!u) return sendJson(res, 401, { error: 'লগইন করুন' });
+      return sendJson(res, 200, { deposits: accountData.deposits.filter(d => d.userId === u.id).map(publicDeposit) });
+    }
+    if (req.method === 'POST' && pathname === '/api/payments/deposit') {
+      const u = verifyUserToken(req);
+      if (!u) return sendJson(res, 401, { error: 'প্রথমে লগইন করুন' });
+      const b = await readJson(req, 8192);
+      const method = String(b.method || '');
+      const amount = Number(b.amount);
+      const trxid = String(b.trxid || '').trim().toUpperCase();
+      if (!['bKash', 'Nagad', 'Rocket'].includes(method)) return sendJson(res, 400, { error: 'পেমেন্ট মাধ্যম নির্বাচন করুন' });
+      if (!Number.isInteger(amount) || amount < 10 || amount > 100000) return sendJson(res, 400, { error: 'Amount ১০ থেকে ১,০০,০০০ টাকার মধ্যে দিন' });
+      if (!/^[A-Z0-9-]{6,40}$/.test(trxid)) return sendJson(res, 400, { error: 'সঠিক Transaction ID দিন' });
+      if (!accountData.settings[method.toLowerCase()]) return sendJson(res, 400, { error: 'এই পেমেন্ট মাধ্যমের নম্বর এখনো সেট করা হয়নি' });
+      if (accountData.deposits.some(d => d.method === method && d.trxid === trxid)) return sendJson(res, 409, { error: 'এই Transaction ID আগেই জমা হয়েছে' });
+      const d = { id: crypto.randomUUID(), userId: u.id, username: u.username, method, amount, trxid, status: 'Pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      accountData.deposits.unshift(d); await saveAccountData();
+      return sendJson(res, 201, { deposit: publicDeposit(d) });
+    }
+
     if (req.method === 'POST' && pathname === '/api/admin/login') {
       if (!ADMIN_PASSWORD) return sendJson(res, 503, { error: 'Render এ FFX-PASS সেট করা নেই। Environment এ FFX-PASS যোগ করে আবার Deploy করুন।' });
       const ip = clientIp(req);
@@ -664,6 +810,39 @@ async function handleApi(req, res, pathname) {
 
     if (!pathname.startsWith('/api/admin/')) return sendJson(res, 404, { error: 'Not found' });
     if (!isAuthed(req)) return sendJson(res, 401, { error: 'লগইন করুন' });
+
+
+    if (req.method === 'GET' && pathname === '/api/admin/payment-settings') {
+      return sendJson(res, 200, { settings: accountData.settings });
+    }
+    if (req.method === 'POST' && pathname === '/api/admin/payment-settings') {
+      const b = await readJson(req, 4096);
+      const next = {};
+      ['bkash', 'nagad', 'rocket'].forEach(k => {
+        const v = String((b.settings || {})[k] || '').trim();
+        if (v && !/^[0-9+ -]{8,20}$/.test(v)) throw new Error(k + ' নম্বর ঠিক নেই');
+        next[k] = v;
+      });
+      accountData.settings = next; await saveAccountData();
+      return sendJson(res, 200, { settings: accountData.settings });
+    }
+    if (req.method === 'GET' && pathname === '/api/admin/deposits') {
+      return sendJson(res, 200, { deposits: accountData.deposits.map(d => Object.assign({}, publicDeposit(d), { username: d.username })) });
+    }
+    if (req.method === 'POST' && pathname === '/api/admin/deposits/status') {
+      const b = await readJson(req, 4096);
+      const d = accountData.deposits.find(x => x.id === String(b.id || ''));
+      if (!d) return sendJson(res, 404, { error: 'Payment request পাওয়া যায়নি' });
+      if (d.status !== 'Pending') return sendJson(res, 409, { error: 'এই Payment আগেই প্রসেস করা হয়েছে' });
+      if (!['Approved', 'Rejected'].includes(b.status)) return sendJson(res, 400, { error: 'ভুল Status' });
+      d.status = b.status; d.updatedAt = new Date().toISOString();
+      if (b.status === 'Approved') {
+        const u = accountData.users.find(x => x.id === d.userId);
+        if (u) u.balance = Math.round((Number(u.balance || 0) + d.amount) * 100) / 100;
+      }
+      await saveAccountData();
+      return sendJson(res, 200, { deposit: publicDeposit(d) });
+    }
 
     if (req.method === 'GET' && pathname === '/api/admin/config') {
       return sendJson(res, 200, currentView());
@@ -803,7 +982,7 @@ async function handleApi(req, res, pathname) {
     }
 
     if (req.method === 'POST' && pathname === '/api/admin/resync') {
-      ready = initStorage();
+      ready = initStorage().then(function () { return loadAccountData(); });
       await ready;
       return sendJson(res, 200, currentView());
     }
@@ -815,6 +994,9 @@ async function handleApi(req, res, pathname) {
     return sendJson(res, 400, { error: (e && e.message) || 'কিছু একটা সমস্যা হয়েছে' });
   }
 }
+
+// Wait for the existing site storage to initialize before loading wallet data.
+ready = ready.then(function () { return loadAccountData(); });
 
 const server = http.createServer((req, res) => {
   ready.then(function () { handle(req, res); }).catch(function () {

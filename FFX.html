@@ -3122,6 +3122,8 @@ async function refreshProfile(){
  if(!getToken()){user=null;updateProfile();return}
  try{var j=await api('/api/auth/me');user=j.user;updateProfile()}catch(e){clearToken();user=null;updateProfile()}
 }
+// Profile refresh button fetches the latest wallet balance from the server.
+window.onRefreshBalance=refreshProfile;
 function updateProfile(){
  var logged=!!user,bal=user?Number(user.balance||0):0;
  if(window.setProfile)window.setProfile({loggedIn:logged,name:user?user.username:'Guest',email:'',balance:bal,orders:0,codes:0});
