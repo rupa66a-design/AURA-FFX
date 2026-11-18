@@ -9,7 +9,22 @@
       "createdAt": "2026-11-18T02:40:50.998Z"
     }
   ],
-  "deposits": [],
+  "deposits": [
+    {
+      "id": "8d78af43-bcaa-4e28-bad9-8de8709c6369",
+      "userId": "8433552b-f509-455e-80d1-1a670418e2f9",
+      "username": "rifat",
+      "method": "Nagad",
+      "amount": 30,
+      "trxid": "ATFATC3",
+      "purpose": "product",
+      "product": "200 FF LIKE",
+      "playerUid": "9257370806",
+      "status": "Pending",
+      "createdAt": "2026-11-18T03:08:58.337Z",
+      "updatedAt": "2026-11-18T03:08:58.337Z"
+    }
+  ],
   "settings": {
     "bkash": "01798547978",
     "nagad": "01779472554",
