@@ -728,7 +728,7 @@ function hashPassword(password, salt) {
   return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (e, key) => e ? reject(e) : resolve(key.toString('hex'))));
 }
 function publicDeposit(d) {
-  return { id: d.id, method: d.method, amount: d.amount, trxid: d.trxid, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt };
+  return { id: d.id, method: d.method, amount: d.amount, trxid: d.trxid, status: d.status, createdAt: d.createdAt, updatedAt: d.updatedAt, purpose: d.purpose || 'wallet', product: d.product || '', playerUid: d.playerUid || '' };
 }
 
 async function handleApi(req, res, pathname) {
@@ -792,6 +792,26 @@ async function handleApi(req, res, pathname) {
       return sendJson(res, 201, { deposit: publicDeposit(d) });
     }
 
+    if (req.method === 'POST' && pathname === '/api/payments/product-order') {
+      const u = verifyUserToken(req);
+      if (!u) return sendJson(res, 401, { error: 'প্রথমে লগইন করুন' });
+      const b = await readJson(req, 8192);
+      const method = String(b.method || '');
+      const amount = Number(b.amount);
+      const trxid = String(b.trxid || '').trim().toUpperCase();
+      const product = String(b.product || '').trim().slice(0, 100);
+      const playerUid = String(b.playerUid || '').trim();
+      if (!['bKash', 'Nagad', 'Rocket'].includes(method)) return sendJson(res, 400, { error: 'পেমেন্ট মাধ্যম নির্বাচন করুন' });
+      if (!Number.isInteger(amount) || amount < 1 || amount > 1000000) return sendJson(res, 400, { error: 'Amount সঠিক নয়' });
+      if (!product || !/^\d{6,20}$/.test(playerUid)) return sendJson(res, 400, { error: 'Product ও সঠিক Player ID দিন' });
+      if (!/^[A-Z0-9-]{6,40}$/.test(trxid)) return sendJson(res, 400, { error: 'সঠিক Transaction ID দিন' });
+      if (!accountData.settings[method.toLowerCase()]) return sendJson(res, 400, { error: 'এই পেমেন্ট মাধ্যমের নম্বর সেট করা হয়নি' });
+      if (accountData.deposits.some(d => d.method === method && d.trxid === trxid)) return sendJson(res, 409, { error: 'এই Transaction ID আগেই জমা হয়েছে' });
+      const d = { id: crypto.randomUUID(), userId: u.id, username: u.username, method, amount, trxid, purpose: 'product', product, playerUid, status: 'Pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      accountData.deposits.unshift(d); await saveAccountData();
+      return sendJson(res, 201, { deposit: publicDeposit(d) });
+    }
+
     if (req.method === 'POST' && pathname === '/api/admin/login') {
       if (!ADMIN_PASSWORD) return sendJson(res, 503, { error: 'Render এ FFX-PASS সেট করা নেই। Environment এ FFX-PASS যোগ করে আবার Deploy করুন।' });
       const ip = clientIp(req);
@@ -836,7 +856,7 @@ async function handleApi(req, res, pathname) {
       if (d.status !== 'Pending') return sendJson(res, 409, { error: 'এই Payment আগেই প্রসেস করা হয়েছে' });
       if (!['Approved', 'Rejected'].includes(b.status)) return sendJson(res, 400, { error: 'ভুল Status' });
       d.status = b.status; d.updatedAt = new Date().toISOString();
-      if (b.status === 'Approved') {
+      if (b.status === 'Approved' && (d.purpose || 'wallet') !== 'product') {
         const u = accountData.users.find(x => x.id === d.userId);
         if (u) u.balance = Math.round((Number(u.balance || 0) + d.amount) * 100) / 100;
       }

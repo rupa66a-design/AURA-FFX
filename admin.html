@@ -898,7 +898,7 @@ async function renderPayments(root){
 
 async function renderOrders(root){
   root.innerHTML='<div class="card"><h2><span class="n">1</span>Payment Requests</h2>'+
-    '<p class="d">গ্রাহকের Transaction ID যাচাই করে তারপর Approve অথবা Reject করুন। Approve করলে Wallet-এ টাকা যোগ হবে।</p>'+
+    '<p class="d">গ্রাহকের Transaction ID যাচাই করে তারপর Approve অথবা Reject করুন। Wallet Add Money Approve করলে Wallet-এ টাকা যোগ হবে; Product Order হলে অর্ডার যাচাইয়ের জন্য Approve হবে।</p>'+
     '<button type="button" class="btn ghost" id="ordersRefresh">Refresh Payments</button>'+
     '<div id="ordersList" style="margin-top:12px"><div class="soon">Loading payments...</div></div></div>';
   var list=$('#ordersList',root);
@@ -917,7 +917,7 @@ async function renderOrders(root){
           '<span class="oa-status '+esc(o.status)+'">'+esc(o.status)+'</span></div>'+
           '<div class="oa-info">'+
           '<div>Username<b>'+esc(o.username||'—')+'</b></div><div>Amount<b>৳'+Number(o.amount||0).toFixed(2)+'</b></div>'+
-          '<div>Payment<b>'+esc(o.method||'')+'</b></div><div>Transaction ID<b>'+esc(o.trxid||'')+'</b></div>'+
+          '<div>Payment<b>'+esc(o.method||'')+'</b></div><div>Type<b>'+(o.purpose==='product'?'Product Order':'Wallet Add Money')+'</b></div>'+(o.purpose==='product'?'<div>Product<b>'+esc(o.product||'')+'</b></div><div>Player UID<b>'+esc(o.playerUid||'')+'</b></div>':'')+'<div>Transaction ID<b>'+esc(o.trxid||'')+'</b></div>'+
           '<div>Request time<b>'+esc(date)+'</b></div></div>';
         if(o.status==='Pending'){
           var actions=document.createElement('div');actions.className='oa-actions';
