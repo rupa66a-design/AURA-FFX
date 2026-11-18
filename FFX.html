@@ -3057,8 +3057,6 @@ setInterval(fetchFreshAccountConfig, 15000);
 <style>
 #ffxUserLayer{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(8,18,45,.66);backdrop-filter:blur(5px)}
 #ffxUserLayer.show{display:flex}
-#ffxUserLayer.payment-open{align-items:flex-start;justify-content:center;overflow-y:auto;padding:0;background:#f4f7fc;backdrop-filter:none}
-#ffxUserLayer.payment-open .fu-card{width:100%;max-width:620px;min-height:100vh;max-height:none;overflow:visible;border:0;border-radius:0;padding:22px 16px 40px;box-shadow:none;background:#f8faff}
 #ffxUserLayer .fu-card{width:100%;max-width:430px;max-height:90vh;overflow:auto;background:#fff;border:1px solid #dbe5f5;border-radius:23px;padding:20px;box-shadow:0 22px 70px rgba(15,35,80,.3)}
 #ffxUserLayer .fu-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 #ffxUserLayer .fu-head b{font-size:19px;color:#14264b}
@@ -3102,7 +3100,7 @@ async function api(url,data){
 }
 function toast(m){var t=document.getElementById('toast');if(!t)return;t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('show')},2400)}
 function open(){layer.classList.add('show');layer.setAttribute('aria-hidden','false')}
-function close(){layer.classList.remove('show','payment-open');layer.setAttribute('aria-hidden','true')}
+function close(){layer.classList.remove('show');layer.setAttribute('aria-hidden','true')}
 document.getElementById('fuClose').onclick=close;
 layer.addEventListener('click',function(e){if(e.target===layer)close()});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
@@ -3124,6 +3122,8 @@ async function refreshProfile(){
  if(!getToken()){user=null;updateProfile();return}
  try{var j=await api('/api/auth/me');user=j.user;updateProfile()}catch(e){clearToken();user=null;updateProfile()}
 }
+// Profile refresh button fetches the latest wallet balance from the server.
+window.onRefreshBalance=refreshProfile;
 function updateProfile(){
  var logged=!!user,bal=user?Number(user.balance||0):0;
  if(window.setProfile)window.setProfile({loggedIn:logged,name:user?user.username:'Guest',email:'',balance:bal,orders:0,codes:0});
@@ -3134,7 +3134,6 @@ function updateProfile(){
 }
 async function logout(){clearToken();user=null;updateProfile();toast('Logout হয়েছে')}
 async function openAddMoney(){
- layer.classList.add('payment-open');
  if(!user){renderAuth('login','প্রথমে Login করুন');open();return}
  try{settings=await api('/api/payments/settings')}catch(e){}
  title.textContent='Add Money';
@@ -3222,8 +3221,6 @@ if(nav[2])nav[2].addEventListener('click',function(e){e.preventDefault();openAdd
 var wallet=document.querySelector('.wallet');if(wallet)wallet.addEventListener('click',function(e){e.preventDefault();openAddMoney()});
 document.querySelectorAll('.btn.login').forEach(function(b){b.addEventListener('click',function(e){if(!user){e.preventDefault();renderAuth('login');open()}},true)});
 var accLogout=document.getElementById('acLogout');if(accLogout)accLogout.onclick=function(){if(user)logout();else{renderAuth('login');open()}};
-var accountAddMoney=document.querySelector('.acc-it[data-go="addmoney"]');
-if(accountAddMoney)accountAddMoney.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();var panel=document.getElementById('accPanel');if(panel){panel.classList.remove('show');panel.setAttribute('aria-hidden','true')}openAddMoney()},true);
 var oldAccLo=document.getElementById('accLo');if(oldAccLo)oldAccLo.addEventListener('click',function(e){e.preventDefault();e.stopImmediatePropagation();if(user)logout();else{renderAuth('login');open()}},true);
 refreshProfile();
 })();
