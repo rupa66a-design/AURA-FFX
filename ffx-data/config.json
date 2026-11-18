@@ -26,84 +26,20 @@
     "hours": "সকাল ৯টা থেকে রাত ১০টা",
     "warn": "১৮ বছরের নিচে অভিভাবকের অনুমতি ছাড়া অর্ডার করা সম্পূর্ণ নিষিদ্ধ। ১৮ বছরের নিচে টপআপকরলে পরবর্তীতে কোন সমস্যা হলে এর দায় ভার আমরা নিব না\nদয়া করে ১৮ বছরের৷ নিচে কেউ অর্ডার করবেন না"
   },
-  "payments": {
-    "bKash": "01798547978",
-    "Rocket": "01971206566",
-    "Nagad": "01321730831"
-  },
-  "orders": [
-    {
-      "id": "MWFQTNFCDFC2DC",
-      "customerKey": "",
-      "userId": "7c8ed385811ca35d8f7e7a6178c24f40",
-      "product": "ff",
-      "package": "200 FF LIKE",
-      "price": 30,
-      "playerId": "9287310806",
-      "method": "Rocket",
-      "trxId": "Gskznbzxmnz",
-      "status": "Approved",
-      "date": "2026-11-14T01:44:50.904Z",
-      "updated": "2026-11-14T01:45:30.610Z"
-    },
-    {
-      "id": "MWFQYDKK17C581",
-      "customerKey": "",
-      "userId": "7c8ed385811ca35d8f7e7a6178c24f40",
-      "product": "uid",
-      "package": "5060 Diamond",
-      "price": 3220,
-      "playerId": "6922428960",
-      "method": "bKash",
-      "trxId": "XGKAKVJ",
-      "status": "Approved",
-      "date": "2026-11-14T01:48:31.412Z",
-      "updated": "2026-11-14T01:48:51.682Z"
-    },
-    {
-      "id": "MWGDVHEBB5A02C",
-      "customerKey": "235f1d137ca31d2397d547612eac3a020620f0e3",
-      "product": "ff",
-      "package": "200 FF LIKE",
-      "price": 30,
-      "playerId": "6922428960",
-      "method": "bKash",
-      "trxId": "zkzksznn",
-      "status": "Approved",
-      "date": "2026-11-14T12:30:07.571Z",
-      "updated": "2026-11-14T12:30:35.304Z"
-    }
-  ],
-  "deposits": [
-    {
-      "id": "MWFSG629D5FD3C",
-      "customerKey": "1e2c64487a966fa2e9e253f68dab66739bda311d",
-      "amount": 100,
-      "method": "bKash",
-      "trxId": "ASHX61XVJ",
-      "status": "Approved",
-      "date": "2026-11-14T02:30:21.105Z",
-      "updated": "2026-11-14T02:30:50.812Z"
-    }
-  ],
-  "balances": {
-    "1e2c64487a966fa2e9e253f68dab66739bda311d": 100
+  "paymentSettings": {
+    "bkash": "",
+    "nagad": "",
+    "rocket": ""
   },
   "users": [
     {
-      "id": "235f1d137ca31d2397d547612eac3a020620f0e3",
-      "name": "RIFAT",
-      "email": "hxff7720@gmail.com",
-      "passwordSalt": "2cf434de6fc6aa100723c0ecb7ef3715",
-      "passwordHash": "d57fd06a3b0e87e18fe4357c36dc6884b1defad70c52c1c25d39985fdfcc52bb689d09847ca05c08b1c711be171a7d3a5718b150ceec628c24b26567b51f0a30",
-      "createdAt": "2026-11-14T02:45:51.179Z"
+      "id": "1bfdfd06-581e-49ba-8e05-7367f3d2fe77",
+      "username": "rifat",
+      "salt": "dddac2e243200f6e0443a8ad42e1d9d5",
+      "passwordHash": "dec96715b88012b86cd653d15d657732878148af3bbcec2a0aa1c63998eb09aad84e4824a18064d1adedd8bd21419c339ac2065ab3a45a4a84c3628c954c746f",
+      "balance": 0,
+      "createdAt": "2026-11-18T10:01:38.545Z"
     }
   ],
-  "sessions": [
-    {
-      "tokenHash": "e709b50b32b552f152a596ddcfa5e69251aaa8659050a9e5c34be7c9db55305a",
-      "userId": "235f1d137ca31d2397d547612eac3a020620f0e3",
-      "expires": 1797216352402
-    }
-  ]
+  "deposits": []
 }
